@@ -1,0 +1,566 @@
+[
+  {
+    "id": "QA001",
+    "question": "Chương trình đào tạo đại học tại trường được xây dựng theo đơn vị gì?",
+    "answer": "Chương trình đào tạo được xây dựng theo đơn vị tín chỉ.",
+    "source": "Quy định về học vụ và đào tạo - Phiên bản hợp nhất"
+  },
+  {
+    "id": "QA002",
+    "question": "Chuẩn đầu ra của chương trình đào tạo bao gồm những yêu cầu gì?",
+    "answer": "Chuẩn đầu ra là yêu cầu cần đạt về phẩm chất và năng lực của người học sau khi hoàn thành một chương trình đào tạo, gồm cả yêu cầu tối thiểu về kiến thức, kỹ năng, mức độ tự chủ và trách nhiệm của người học khi tốt nghiệp.",
+    "source": "Quy định về học vụ và đào tạo - Phiên bản hợp nhất"
+  },
+  {
+    "id": "QA003",
+    "question": "Một học phần thông thường được tổ chức trong bao lâu?",
+    "answer": "Một học phần thông thường được tổ chức giảng dạy, học tập trong một học kỳ.",
+    "source": "Quy định về học vụ và đào tạo - Phiên bản hợp nhất"
+  },
+  {
+    "id": "QA004",
+    "question": "Học phần A là học phần tiên quyết của học phần B nghĩa là gì?",
+    "answer": "Học phần A là học phần tiên quyết của học phần B: sinh viên phải tích luỹ được học phần A trước khi đăng ký học học phần B. Trong trường hợp cần thiết, điều kiện này còn kèm theo kết quả học tập tối thiểu của học phần A từ một mức điểm cụ thể.",
+    "source": "Quy định về học vụ và đào tạo - Phiên bản hợp nhất"
+  },
+  {
+    "id": "QA005",
+    "question": "Một tín chỉ tương đương bao nhiêu giờ học tập định mức của sinh viên?",
+    "answer": "Một tín chỉ được tính tương đương 50 giờ học tập định mức của người học.",
+    "source": "Quy định về học vụ và đào tạo - Phiên bản hợp nhất"
+  },
+  {
+    "id": "QA006",
+    "question": "Một tín chỉ yêu cầu tối thiểu 30 giờ giảng lý thuyết đúng không?",
+    "answer": "Không đúng. Một tín chỉ yêu cầu thực hiện tối thiểu 15 giờ giảng lý thuyết.",
+    "source": "Quy định về học vụ và đào tạo - Phiên bản hợp nhất"
+  },
+  {
+    "id": "QA007",
+    "question": "Trường tổ chức bao nhiêu học kỳ chính trong một năm học?",
+    "answer": "Trường tổ chức hai học kỳ chính trong một năm học.",
+    "source": "Quy định về học vụ và đào tạo - Phiên bản hợp nhất"
+  },
+  {
+    "id": "QA008",
+    "question": "Một học kỳ chính có bao nhiêu tuần học?",
+    "answer": "Mỗi học kỳ chính có 15 tuần học.",
+    "source": "Quy định về học vụ và đào tạo - Phiên bản hợp nhất"
+  },
+  {
+    "id": "QA009",
+    "question": "Học kỳ hè luôn có 15 tuần học giống học kỳ chính đúng không?",
+    "answer": "Không đúng. Học kỳ hè có thời gian ngắn hơn học kỳ chính. Học kỳ phụ (học kỳ hè) được tổ chức trong khoảng từ 6 đến 13 tuần.",
+    "source": "Quy định về học vụ và đào tạo - Phiên bản hợp nhất"
+  },
+  {
+    "id": "QA010",
+    "question": "Thời gian đào tạo chuẩn theo học kỳ chính của chương trình chính quy là bao nhiêu học kỳ?",
+    "answer": "Thời gian đào tạo chuẩn theo học kỳ chính của hình thức chính quy là 8 học kỳ.",
+    "source": "Quy định về học vụ và đào tạo - Phiên bản hợp nhất"
+  },
+  {
+    "id": "QA011",
+    "question": "Thời gian đào tạo tối đa theo học kỳ chính của chương trình chính quy là bao nhiêu học kỳ?",
+    "answer": "Thời gian đào tạo tối đa theo học kỳ chính đối với hình thức đào tạo chính quy là 12 học kỳ.",
+    "source": "Quy định về học vụ và đào tạo - Phiên bản hợp nhất"
+  },
+  {
+    "id": "QA012",
+    "question": "Chương trình Kỹ sư Việt–Pháp có thời gian đào tạo tối đa là 12 học kỳ đúng không?",
+    "answer": "Không đúng. Chương trình đào tạo Kỹ sư Việt–Pháp có thời gian đào tạo tối đa là 14 học kỳ.",
+    "source": "Quy định về học vụ và đào tạo - Phiên bản hợp nhất"
+  },
+  {
+    "id": "QA013",
+    "question": "Sinh viên chính quy được kéo dài thêm tối đa bao nhiêu học kỳ trong trường hợp đặc biệt?",
+    "answer": "Sinh viên chính quy trong trường hợp đặc biệt được kéo dài tối đa 01 học kỳ chính.",
+    "source": "Quy định về học vụ và đào tạo - Phiên bản hợp nhất"
+  },
+  {
+    "id": "QA014",
+    "question": "Tuần học vụ được đánh số theo tiêu chuẩn nào?",
+    "answer": "Tuần học vụ được đánh số theo tuần dương lịch, tuân theo tiêu chuẩn ISO 8601.",
+    "source": "Quy định về học vụ và đào tạo - Phiên bản hợp nhất"
+  },
+  {
+    "id": "QA015",
+    "question": "Thời gian tổ chức giờ học trong ngày kéo dài đến 23 giờ đúng không?",
+    "answer": "Không đúng. Thời gian tổ chức các giờ học trong ngày từ 06 giờ đến trước 22 giờ.",
+    "source": "Quy định về học vụ và đào tạo - Phiên bản hợp nhất"
+  },
+  {
+    "id": "QA016",
+    "question": "Một phiên học lý thuyết được phép kéo dài tối đa bao nhiêu tiết liên tục?",
+    "answer": "Một phiên học lý thuyết không kéo dài quá 03 tiết liên tục.",
+    "source": "Quy định về học vụ và đào tạo - Phiên bản hợp nhất"
+  },
+  {
+    "id": "QA017",
+    "question": "Một phiên học thí nghiệm tối đa chỉ được xếp 3 tiết đúng không?",
+    "answer": "Không đúng. Một phiên học thí nghiệm hoặc thực hành kéo dài không quá 05 tiết liên tục.",
+    "source": "Quy định về học vụ và đào tạo - Phiên bản hợp nhất"
+  },
+  {
+    "id": "QA018",
+    "question": "Đơn vị nào chịu trách nhiệm xếp và điều chỉnh thời khóa biểu?",
+    "answer": "Phòng Đào tạo chịu trách nhiệm xếp và điều chỉnh thời khóa biểu các học phần.",
+    "source": "Quy định về học vụ và đào tạo - Phiên bản hợp nhất"
+  },
+  {
+    "id": "QA019",
+    "question": "Các phòng đào tạo chịu trách nhiệm xếp và điều chỉnh thời khoá biểu từng học kỳ và công bố công khai cho các bên liên quan trước bao lâu?",
+    "answer": "Các phòng đào tạo chịu trách nhiệm xếp và điều chỉnh thời khoá biểu từng học kỳ và công bố công khai cho các bên liên quan trước khi bắt đầu áp dụng ít nhất 01 tuần, ngoại trừ các trường hợp khẩn cấp/bất khả kháng.",
+    "source": "Quy định về học vụ và đào tạo - Phiên bản hợp nhất"
+  },
+  {
+    "id": "QA020",
+    "question": "Một lớp học phần có thể được phân công cho nhiều giảng viên giảng dạy không?",
+    "answer": "Một lớp học phần có thể được phân công cho nhiều giảng viên giảng dạy. Trong trường hợp đó, phải có một giảng viên phụ trách chính và thời khóa biểu phải được tách riêng cho từng giảng viên.",
+    "source": "Quy định về học vụ và đào tạo - Phiên bản hợp nhất"
+  },
+  {
+    "id": "QA021",
+    "question": "Sĩ số trung bình của các học phần đại cương toàn trường là bao nhiêu?",
+    "answer": "Sĩ số trung bình của các học phần đại cương toàn trường là 140 hoặc lớn hơn.",
+    "source": "Quy định về học vụ và đào tạo - Phiên bản hợp nhất"
+  },
+  {
+    "id": "QA022",
+    "question": "Các học phần chuyên ngành thường có sĩ số từ 100 đến 120 sinh viên đúng không?",
+    "answer": "Không đúng. Các học phần ngành, chuyên ngành có sĩ số trung bình từ 40 đến 60 sinh viên.",
+    "source": "Quy định về học vụ và đào tạo - Phiên bản hợp nhất"
+  },
+  {
+    "id": "QA023",
+    "question": "Mỗi Khoa được xét bao nhiêu Cúp toàn năng trong khen thưởng tốt nghiệp?",
+    "answer": "Mỗi Khoa được xét 01 Cúp toàn năng cấp Khoa.",
+    "source": "Kết luận HĐHV_HK251.signed"
+  },
+  {
+    "id": "QA024",
+    "question": "Lớp thực hành bắt buộc phải có tối thiểu 30 sinh viên mới được mở đúng không?",
+    "answer": "Không đúng. Theo quy định, lớp học phần thực hành, thực tập, thí nghiệm có sĩ số tối thiểu để mở lớp là 15 sinh viên.",
+    "source": "Quy định về học vụ và đào tạo - Phiên bản hợp nhất"
+  },
+  {
+    "id": "QA025",
+    "question": "Sinh viên không đăng ký bất kỳ môn học nào trong học kỳ sẽ bị xử lý như thế nào?",
+    "answer": "Sinh viên không có đăng ký môn học (không có thời khóa biểu trong học kỳ) sẽ bị xử lý buộc thôi học.",
+    "source": "Kết luận HĐHV_HK231-chính thức"
+  },
+  {
+    "id": "QA026",
+    "question": "Số tín chỉ tối thiểu sinh viên chính quy phải đăng ký trong một học kỳ là bao nhiêu?",
+    "answer": "Số tín chỉ tối thiểu sinh viên chính quy phải đăng ký trong một học kỳ chính là 14 tín chỉ. Trường hợp đặc biệt (học lực yếu, hoặc vì lý do sức khoẻ), sinh viên được phép học tối thiểu 11 tín chỉ và áp dụng tối đa trong 02 học kỳ.",
+    "source": "Quy định về học vụ và đào tạo - Phiên bản hợp nhất"
+  },
+  {
+    "id": "QA027",
+    "question": "Số tín chỉ tối đa sinh viên chính quy được phép đăng ký trong một học kỳ chính là bao nhiêu?",
+    "answer": "Số tín chỉ tối đa sinh viên chính quy được phép đăng ký trong một học kỳ chính là 25 tín chỉ áp dụng đối với trường hợp có học lực đạt từ loại giỏi và được sự đồng ý của Khoa quản lý.",
+    "source": "Quy định về học vụ và đào tạo - Phiên bản hợp nhất"
+  },
+  {
+    "id": "QA028",
+    "question": "Số tín chỉ thiết kế trung bình mỗi học kỳ của chương trình vừa làm vừa học là bao nhiêu?",
+    "answer": "Số tín chỉ thiết kế trung bình mỗi học kỳ của chương trình vừa làm vừa học là 14.",
+    "source": "Quy định về học vụ và đào tạo - Phiên bản hợp nhất"
+  },
+  {
+    "id": "QA029",
+    "question": "Sinh viên vừa làm vừa học có số tín chỉ thiết kế trung bình là 17 đúng không?",
+    "answer": "Không đúng. Số tín chỉ thiết kế trung bình cho một học kỳ chính của hình thức vừa làm vừa học là 14 tín chỉ.",
+    "source": "Quy định về học vụ và đào tạo - Phiên bản hợp nhất"
+  },
+  {
+    "id": "QA030",
+    "question": "Sinh viên cần tích lũy tối thiểu bao nhiêu phần trăm số tín chỉ để đăng ký Thực tập ngoài trường?",
+    "answer": "Sinh viên phải tích lũy ít nhất 65% số tín chỉ của chương trình đào tạo để đăng ký Thực tập ngoài trường.",
+    "source": "Kết luận HĐHV_HK251.signed"
+  },
+  {
+    "id": "QA031",
+    "question": "Để đăng ký Thực tập ngoài trường chỉ cần hoàn thành 50% số tín chỉ đúng không?",
+    "answer": "Không đúng. Để đăng ký học phần Thực tập ngoài trường, sinh viên phải tích lũy đủ ít nhất 65% số tín chỉ của chương trình đào tạo.",
+    "source": "Kết luận HĐHV_HK251.signed"
+  },
+  {
+    "id": "QA032",
+    "question": "Sinh viên cần tích lũy bao nhiêu phần trăm số tín chỉ để đăng ký Khoá luận tốt nghiệp?",
+    "answer": "Để đăng ký học phần Khóa luận tốt nghiệp, sinh viên phải tích lũy đủ ít nhất 85% số tín chỉ của chương trình đào tạo.",
+    "source": "Kết luận HĐHV_HK251.signed"
+  },
+  {
+    "id": "QA033",
+    "question": "Đăng ký Khoá luận tốt nghiệp chỉ cần hoàn thành 70% tín chỉ đúng không?",
+    "answer": "Không đúng. Khoá luận tốt nghiệp yêu cầu sinh viên tích lũy tối thiểu 85% số tín chỉ.",
+    "source": "Kết luận HĐHV_HK251.signed"
+  },
+  {
+    "id": "QA034",
+    "question": "Thực tập ngoài trường có mối quan hệ như thế nào với Đồ án chuyên ngành?",
+    "answer": "Thực tập ngoài trường là học phần song hành của Đồ án chuyên ngành.",
+    "source": "Quy định về học vụ và đào tạo - Phiên bản hợp nhất"
+  },
+  {
+    "id": "QA035",
+    "question": "Thời điểm tối đa để giảng viên nộp điểm về các phòng đào tạo của nhà trường là?",
+    "answer": "Thời điểm tối đa để giảng viên nộp điểm về các phòng đào tạo của nhà trường là 02 tuần từ ngày thi; hoặc 01 tuần từ ngày thi dạng vấn đáp, bảo vệ hội đồng; hoặc 02 tuần từ sau ngày thi cuối cùng theo biểu hoạch học tập học kỳ đối với các học phần không có lịch thi.",
+    "source": "Quy định về học vụ và đào tạo - Phiên bản hợp nhất"
+  },
+  {
+    "id": "QA036",
+    "question": "Giảng viên được phép nộp điểm sau 1 tháng kể từ ngày thi đúng không?",
+    "answer": "Không đúng. Giảng viên phải nộp điểm về các phòng đào tạo của nhà trường chậm nhất là 02 tuần từ ngày thi; hoặc 01 tuần từ ngày thi dạng vấn đáp, bảo vệ hội đồng; hoặc 02 tuần từ sau ngày thi cuối cùng theo biểu lịch học tập học kỳ đối với các học phần không có lịch thi.",
+    "source": "Quy định về học vụ và đào tạo - Phiên bản hợp nhất"
+  },
+  {
+    "id": "QA037",
+    "question": "Hệ thống e-learning chính thức được sử dụng trong giảng dạy tại trường là gì?",
+    "answer": "Hệ thống hỗ trợ giảng dạy trực tuyến chính thức được sử dụng là Bách khoa e-learning (BKeL).",
+    "source": "Quy định về học vụ và đào tạo - Phiên bản hợp nhất"
+  },
+  {
+    "id": "QA038",
+    "question": "Đề cương học phần phải được đưa lên hệ thống vào thời điểm nào?",
+    "answer": "Đề cương học phần phải được đưa lên hệ thống ngay trước tuần học đầu tiên.",
+    "source": "Quy định về học vụ và đào tạo - Phiên bản hợp nhất"
+  },
+  {
+    "id": "QA039",
+    "question": "Giảng viên được phép đưa đề cương học phần sau tuần học đầu tiên đúng không?",
+    "answer": "Không đúng. Giảng viên phải đưa đề cương học phần lên hệ thống Bách khoa e-learning (BKeL) ngay trước tuần đầu tiên của lớp học.",
+    "source": "Quy định về học vụ và đào tạo - Phiên bản hợp nhất"
+  },
+  {
+    "id": "QA040",
+    "question": "Sau khi kết thúc lớp học, giảng viên có phải công bố kết quả học tập của sinh viên không?",
+    "answer": "Sau khi kết thúc lớp học, giảng viên phải công bố kết quả học tập của sinh viên và mức độ đáp ứng chuẩn đầu ra (cho từng chuẩn đầu ra) cho sinh viên.",
+    "source": "Quy định về học vụ và đào tạo - Phiên bản hợp nhất"
+  },
+  {
+    "id": "QA041",
+    "question": "Sinh viên có thể yêu cầu chấm phúc tra bài thi không?",
+    "answer": "Có, sinh viên có thể yêu cầu chấm phúc tra bài thi tự luận. Thời hạn yêu cầu chấm phúc tra là tối đa 01 tháng sau ngày công bố kết quả và chỉ được yêu cầu chấm phúc tra 01 lần cho một học phần trong học kỳ.",
+    "source": "Quy định về học vụ và đào tạo - Phiên bản hợp nhất"
+  },
+  {
+    "id": "QA042",
+    "question": "Học phần tốt nghiệp bao gồm những hình thức nào?",
+    "answer": "Học phần tốt nghiệp bao gồm các hình thức: Thực tập ngoài trường, Đồ án chuyên ngành, Khoá luận tốt nghiệp.",
+    "source": "Quy định về học vụ và đào tạo - Phiên bản hợp nhất"
+  },
+  {
+    "id": "QA043",
+    "question": "Đánh giá học phần bao gồm những hình thức nào?",
+    "answer": "Các hình thức đánh giá học phần có thể bao gồm trắc nghiệm, tự luận, vấn đáp, bài luận, sản phẩm, bảo vệ trước tập thể giảng viên hay hội đồng.",
+    "source": "Quy định về học vụ và đào tạo - Phiên bản hợp nhất"
+  },
+  {
+    "id": "QA044",
+    "question": "Sinh viên phải tuân thủ quy định nào khi tham gia thí nghiệm?",
+    "answer": "Sinh viên phải có sự chuẩn bị sẵn sàng và nắm vững nội dung thí nghiệm và các quy định an toàn trước khi thực hiện thí nghiệm. Giảng viên và sinh viên phải đảm bảo an toàn, trật tự theo đúng nội quy phòng thí nghiệm. Chỉ sinh viên có Bảo hiểm Y tế và Bảo hiểm tai nạn mới được vào phòng thí nghiệm để thực hiện bài thí nghiệm.",
+    "source": "Quy định về học vụ và đào tạo - Phiên bản hợp nhất"
+  },
+  {
+    "id": "QA046",
+    "question": "Từ khóa 2023, chứng chỉ MOS được yêu cầu như thế nào với sinh viên chương trình Tiếng Anh?",
+    "answer": "Từ khóa 2023 đối với chương trình Tiếng Anh, chứng chỉ MOS là bắt buộc để được đăng ký học phần Khóa luận tốt nghiệp.",
+    "source": "184_Thông báo Kết luận tại Phiên họp Hội đồng học vụ ĐH&SĐH - HK232"
+  },
+  {
+    "id": "QA047",
+    "question": "Tiêu chuẩn giấy khen đầu khoá cho sinh viên chính quy bao gồm những điều kiện nào?",
+    "answer": "Tiêu chuẩn giấy khen đầu khoá cho sinh viên chính quy bao gồm: Nếu không được huy chương/cúp, tốt nghiệp đúng thời gian đào tạo kế hoạch, Điểm rèn luyện: Xuất sắc, Xếp loại tốt nghiệp từ Giỏi.",
+    "source": "184_Thông báo Kết luận tại Phiên họp Hội đồng học vụ ĐH&SĐH - HK232"
+  },
+  {
+    "id": "QA048",
+    "question": "Quy định về số lượng hướng dẫn học viên cao học của một giảng viên là bao nhiêu?",
+    "answer": "Giảng viên hướng dẫn độc lập không quá 05 học viên trong cùng thời điểm. Trường hợp đồng hướng dẫn 02 học viên được tính tương đương hướng dẫn độc lập 01 học viên.",
+    "source": "184_Thông báo Kết luận tại Phiên họp Hội đồng học vụ ĐH&SĐH - HK232"
+  },
+  {
+    "id": "QA049",
+    "question": "Trường hợp học viên bồi dưỡng sau đại học được phép đăng ký những môn học nào?",
+    "answer": "Học viên bồi dưỡng sau đại học không được đăng ký môn Anh văn 1, Anh văn 2 và các môn học thuộc học phần tốt nghiệp trong chương trình đào tạo Thạc sĩ.",
+    "source": "184_Thông báo Kết luận tại Phiên họp Hội đồng học vụ ĐH&SĐH - HK232"
+  },
+  {
+    "id": "QA050",
+    "question": "Thời hạn nộp lại minh chứng bài báo khoa học đã được xuất bản là bao lâu?",
+    "answer": "Học viên phải làm cam kết về thời hạn nộp lại minh chứng bài báo khoa học đã được xuất bản. Chậm nhất 12 tháng kể từ ngày được xét tốt nghiệp, nếu học viên chưa thể nộp lại minh chứng bài báo khoa học đã được xuất bản, Nhà trường sẽ thực hiện thủ tục thu hồi bằng đã cấp.",
+    "source": "184_Thông báo Kết luận tại Phiên họp Hội đồng học vụ ĐH&SĐH - HK232"
+  },
+  {
+    "id": "QA051",
+    "question": "Chuẩn ngoại ngữ tiếng Anh từng năm học áp dụng từ khóa nào?",
+    "answer": "Chuẩn ngoại ngữ tiếng Anh từng năm học được áp dụng từ khóa 2025 và từ học kỳ 1/2026-2027 đối với khóa 2024.",
+    "source": "Ket luan tai Phien hop Hoi dong hoc vu DH _ SDH HK242.signed"
+  },
+  {
+    "id": "QA052",
+    "question": "Chuẩn tiếng Anh năm thứ 2 (hết năm 1) yêu cầu sinh viên đạt môn học nào?",
+    "answer": "Chuẩn tiếng Anh năm thứ 2 (hết năm 1) yêu cầu sinh viên phải đạt Anh văn 1.",
+    "source": "Ket luan tai Phien hop Hoi dong hoc vu DH _ SDH HK242.signed"
+  },
+  {
+    "id": "QA053",
+    "question": "Chuẩn tiếng Anh năm thứ 3 (hết năm 2) yêu cầu sinh viên phải đạt những môn học nào?",
+    "answer": "Chuẩn tiếng Anh năm thứ 3 (hết năm 2) yêu cầu sinh viên phải đạt Anh văn 1, Anh văn 2, Anh văn 3, Anh văn 4.",
+    "source": "Ket luan tai Phien hop Hoi dong hoc vu DH _ SDH HK242.signed"
+  },
+  {
+    "id": "QA054",
+    "question": "Chuẩn tiếng Pháp năm 2 (hết năm 1) của Chương trình Kỹ sư Chất lượng cao Việt - Pháp yêu cầu gì?",
+    "answer": "Chuẩn tiếng Pháp năm 2 (hết năm 1) của Chương trình Kỹ sư Chất lượng cao Việt - Pháp yêu cầu: Pháp văn 1.",
+    "source": "Ket luan tai Phien hop Hoi dong hoc vu DH _ SDH HK242.signed"
+  },
+  {
+    "id": "QA055",
+    "question": "Sinh viên có điểm trung bình tích lũy < 2.0 được phép đăng ký môn học như thế nào?",
+    "answer": "Sinh viên lập phương án cải thiện điểm trung bình, đăng ký môn học chỉ được phép khi có điểm trung bình tích lũy dự kiến >= 2.0.",
+    "source": "Ket luan tai Phien hop Hoi dong hoc vu DH _ SDH HK242.signed"
+  },
+  {
+    "id": "QA056",
+    "question": "Số tín chỉ tối đa được đăng ký ở Đợt 1 (đợt đăng ký nhu cầu) là bao nhiêu?",
+    "answer": "Số tín chỉ đăng ký ở Đợt 1 (đợt đăng ký nhu cầu) tối đa là 25 tín chỉ.",
+    "source": "Ket luan tai Phien hop Hoi dong hoc vu DH _ SDH HK242.signed"
+  },
+  {
+    "id": "QA057",
+    "question": "Điểm trung bình học kỳ và điểm trung bình tích lũy được làm tròn đến mức nào?",
+    "answer": "Điểm trung bình học kỳ và điểm trung bình tích lũy được làm tròn đến 0.1.",
+    "source": "Ket luan tai Phien hop Hoi dong hoc vu DH _ SDH HK242.signed"
+  },
+  {
+    "id": "QA058",
+    "question": "Chứng chỉ ngoại ngữ TOEFL IBT Home Edition có được sử dụng để xét miễn các học phần Anh văn không?",
+    "answer": "Không, chứng chỉ TOEFL IBT Home Edition không được sử dụng trong xét miễn các học phần Anh văn và xét tốt nghiệp.",
+    "source": "Ket luan tai Phien hop Hoi dong hoc vu DH _ SDH HK242.signed"
+  },
+  {
+    "id": "QA059",
+    "question": "Tín chỉ tự do bị loại trừ những loại nào?",
+    "answer": "Tín chỉ tự do bị loại trừ: Nhập môn, Khối kiến thức Tốt nghiệp.",
+    "source": "Ket luan tai Phien hop Hoi dong hoc vu DH _ SDH HK242.signed"
+  },
+  {
+    "id": "QA060",
+    "question": "Danh mục các môn trùng lắp được xác định như thế nào?",
+    "answer": "Danh mục các môn 'trùng lắp' là những môn có kiến thức hoặc chuẩn đầu ra trùng lắp từ 50% trở lên.",
+    "source": "Ket luan tai Phien hop Hoi dong hoc vu DH _ SDH HK242.signed"
+  },
+  {
+    "id": "QA061",
+    "question": "Từ học kỳ nào, sinh viên phải hoàn thành điều kiện về điểm trung bình tích lũy >= 2.0 mới được phép đăng ký các học phần tốt nghiệp?",
+    "answer": "Sinh viên phải hoàn thành điều kiện về điểm trung bình tích lũy >= 2.0 trước khi được phép đăng ký các học phần tốt nghiệp, áp dụng bắt đầu từ học kỳ 1/2025-2026.",
+    "source": "Ket luan tai Phien hop Hoi dong hoc vu DH _ SDH HK242.signed"
+  },
+  {
+    "id": "QA062",
+    "question": "Khi sinh viên sao chép các môn học bị xếp sẵn, họ cần liên hệ với ai?",
+    "answer": "Sinh viên cần liên hệ Giáo viên chủ nhiệm, Cố vấn học tập hoặc Khoa để được tư vấn và xây dựng kế hoạch học tập riêng.",
+    "source": "Ket luan tai Phien hop Hoi dong hoc vu DH _ SDH HK242.signed"
+  },
+  {
+    "id": "QA063",
+    "question": "Thẩm quyền cấp bằng tốt nghiệp trình độ đại học, thạc sĩ, tiến sĩ là gì?",
+    "answer": "Các văn bằng tốt nghiệp trình độ đại học, thạc sĩ, tiến sĩ do Hiệu trưởng cấp.",
+    "source": "QD 2349_ban hành Quy định Quản lý cấp phát văn bằng chứng chỉ năm 2024"
+  },
+  {
+    "id": "QA064",
+    "question": "Phòng Đào tạo Sau Đại học có trách nhiệm quản lý cấp phát những loại bằng nào?",
+    "answer": "Phòng Đào tạo Sau Đại học có trách nhiệm quản lý, cấp phát bằng thạc sĩ, tiến sĩ.",
+    "source": "QD 2349_ban hành Quy định Quản lý cấp phát văn bằng chứng chỉ năm 2024"
+  },
+  {
+    "id": "QA065",
+    "question": "Bản chính văn bằng, chứng chỉ được cấp bao nhiêu lần?",
+    "answer": "Bản chính văn bằng, chứng chỉ được cấp một lần. Trường hợp văn bằng, chứng chỉ đã cấp cho người học nhưng phát hiện bị viết sai do lỗi của nhà trường thì nhà trường có trách nhiệm cấp lại bản chính cho người học.",
+    "source": "QD 2349_ban hành Quy định Quản lý cấp phát văn bằng chứng chỉ năm 2024"
+  },
+  {
+    "id": "QA066",
+    "question": "Phôi văn bằng chứng chỉ bị hủy được cắt như thế nào?",
+    "answer": "Phôi văn bằng, chứng chỉ bị hủy sẽ được cắt góc, đóng dấu hủy và lưu trữ trong vòng 5 năm.",
+    "source": "QD 2349_ban hành Quy định Quản lý cấp phát văn bằng chứng chỉ năm 2024"
+  },
+  {
+    "id": "QA067",
+    "question": "Các thành phần điểm phải như thế nào để sinh viên không bị cấm thi?",
+    "answer": "Tất cả các thành phần điểm phải có điểm > 0. Sẽ cấm thi khi có bất kỳ thành phần điểm nào = 0.",
+    "source": "Các thay đổi chính về học vụ từ học kỳ 222"
+  },
+  {
+    "id": "QA068",
+    "question": "Đối với các học phần có thí nghiệm, sinh viên bị cấm thi khi điểm nào nhỏ hơn 4.0?",
+    "answer": "Đối với các học phần có thí nghiệm, sinh viên sẽ bị cấm thi nếu có điểm nhỏ hơn 4.0 (thang điểm 10).",
+    "source": "Các thay đổi chính về học vụ từ học kỳ 222"
+  },
+  {
+    "id": "QA069",
+    "question": "Chứng chỉ VNU-EPT và VSTEP quốc gia có tác dụng gì với sinh viên?",
+    "answer": "Chứng chỉ VNU-EPT và VSTEP quốc gia được công nhận để xét miễn môn Anh Văn 1, 2, 3, 4 cho sinh viên khóa 2020 về trước hoặc sinh viên từ khóa 2021 về sau, áp dụng trong năm học đầu tiên.",
+    "source": "Các thay đổi chính về học vụ từ học kỳ 222"
+  },
+  {
+    "id": "QA070",
+    "question": "Bảng quy đổi tương đương Chứng chỉ tiếng Pháp TCF là gì?",
+    "answer": "Chứng chỉ Tiếng Pháp tương đương: DELF B1 và TCF B1 tương đương Bậc 3 (CEFR B1); DELF B2 và TCF B2 tương đương Bậc 4 (CEFR B2).",
+    "source": "Các thay đổi chính về học vụ từ học kỳ 222"
+  },
+  {
+    "id": "QA071",
+    "question": "Khi sinh viên được miễn môn học, điểm miễn có được tính vào điểm trung bình tích lũy không?",
+    "answer": "Khi sinh viên học đạt các học phần khác tương đương, thay thế cho các học phần gốc trong chương trình đào tạo, sẽ được tính tích lũy tín chỉ và điểm trung bình tích lũy theo số tín chỉ của môn học tương đương, thay thế.",
+    "source": "Các thay đổi chính về học vụ từ học kỳ 222"
+  },
+  {
+    "id": "QA072",
+    "question": "Những loại môn nào được coi là tín chỉ tự chọn tự do?",
+    "answer": "Tín chỉ tự do bao gồm: các môn cơ sở ngành, ngành, chuyên ngành và các môn khởi nghiệp (ngoại trừ khối kiến thức tốt nghiệp), các môn cao học/Kỹ sư dùng miễn bậc Đại học, loại trừ các môn trùng lắp.",
+    "source": "Các thay đổi chính về học vụ từ học kỳ 222"
+  },
+  {
+    "id": "QA073",
+    "question": "Cố vấn học tập phải có những tiêu chí nào?",
+    "answer": "Cố vấn học tập phải nắm vững ngành/nghề, quy định học vụ, chương trình đào tạo hoặc được cử làm Giáo viên chủ nhiệm kiêm nhiệm.",
+    "source": "Các thay đổi chính về học vụ từ học kỳ 222"
+  },
+  {
+    "id": "QA074",
+    "question": "Sinh viên diện cảnh báo học vụ phải làm gì trước và sau khi đăng ký môn học?",
+    "answer": "Sinh viên diện cảnh báo học vụ phải tham vấn Cố vấn học tập trước và sau khi đăng ký môn học. Bản đăng ký môn học cuối cùng phải được sự đồng ý của Cố vấn học tập.",
+    "source": "Các thay đổi chính về học vụ từ học kỳ 222"
+  },
+  {
+    "id": "QA075",
+    "question": "Thời gian học của song ngành tuyển sinh từ đầu là bao lâu?",
+    "answer": "Thời gian đào tạo tiêu chuẩn của song ngành tuyển sinh từ đầu là 05 năm, tối đa 07 năm.",
+    "source": "474_TB Kết luận tại phiên họp Hội đồng học vụ ĐH  SĐH - HK241"
+  },
+  {
+    "id": "QA076",
+    "question": "Sau bao lâu kể từ khi bắt đầu học kỳ, trường sẽ không tiếp nhận đơn đăng ký môn học trễ hạn?",
+    "answer": "Sau 2 tuần kể từ khi bắt đầu học kỳ, sẽ không tiếp nhận đơn hoặc công văn đăng ký môn học trễ hạn.",
+    "source": "474_TB Kết luận tại phiên họp Hội đồng học vụ ĐH  SĐH - HK241"
+  },
+  {
+    "id": "QA077",
+    "question": "Trước tuần thứ mấy, sinh viên diện Dự thính chưa thanh toán học phí sẽ bị hủy thời khóa biểu?",
+    "answer": "Trước tuần thứ 8, sinh viên các diện Dự thính chưa thanh toán học phí đúng hạn sẽ bị hủy thời khóa biểu, hủy kết quả học tập, hủy danh sách thi cuối kỳ.",
+    "source": "474_TB Kết luận tại phiên họp Hội đồng học vụ ĐH  SĐH - HK241"
+  },
+  {
+    "id": "QA078",
+    "question": "Điều kiện gì để Hiệu trưởng cho phép tạm hoãn buộc thôi học?",
+    "answer": "Trường hợp đặc biệt, khi có lý do chính đáng, ngoài trừ trường hợp bị vi phạm ở mức buộc thôi học hoặc hết thời gian đào tạo tối đa, Hiệu trưởng xem xét cho phép tạm hoãn buộc thôi học tại thời điểm xem xét trước khi ra quyết định.",
+    "source": "474_TB Kết luận tại phiên họp Hội đồng học vụ ĐH  SĐH - HK241"
+  },
+  {
+    "id": "QA079",
+    "question": "Môn học bắt buộc từ cơ sở ngành trở đi phải có những yêu cầu nào?",
+    "answer": "Môn học bắt buộc từ cơ sở ngành trở đi phải có học phần tiên quyết, khuyến nghị.",
+    "source": "474_TB Kết luận tại phiên họp Hội đồng học vụ ĐH  SĐH - HK241"
+  },
+  {
+    "id": "QA080",
+    "question": "Học kỳ doanh nghiệp được thực hiện bao nhiêu lần trong thời gian học của sinh viên?",
+    "answer": "Học kỳ doanh nghiệp có thể được lựa chọn, không bắt buộc và sinh viên được thực hiện tối đa 01 lần trong thời gian học.",
+    "source": "Kết luận HĐHV_HK231-chính thức"
+  },
+  {
+    "id": "QA081",
+    "question": "Số tín chỉ tối thiểu của học kỳ doanh nghiệp là bao nhiêu?",
+    "answer": "Học kỳ doanh nghiệp có số tín chỉ >= 11.",
+    "source": "Kết luận HĐHV_HK231-chính thức"
+  },
+  {
+    "id": "QA082",
+    "question": "Thời gian tối thiểu thực hiện học kỳ doanh nghiệp là bao lâu?",
+    "answer": "Thời gian thực hiện học kỳ doanh nghiệp tối thiểu là 12 tuần tương đương 11 tín chỉ hoặc tối thiểu 15 tuần tương đương 15 tín chỉ.",
+    "source": "Kết luận HĐHV_HK231-chính thức"
+  },
+  {
+    "id": "QA083",
+    "question": "Sinh viên liên thông Đại học-Thạc sĩ có điều kiện gì để được phép chuyển đổi loại Chương trình đào tạo?",
+    "answer": "Học viên có quyền điều chỉnh loại Chương trình đào tạo trong quá trình học tập của mình nếu không trong thời gian bị kỷ luật từ cảnh cáo trở lên.",
+    "source": "184_Thông báo Kết luận tại Phiên họp Hội đồng học vụ ĐH&SĐH - HK232"
+  },
+  {
+    "id": "QA084",
+    "question": "Những môn nào không được phép thay đổi tên đề tài luận văn Thạc sĩ?",
+    "answer": "Không cho phép đổi tên đề tài Luận văn Thạc sĩ sau khi bảo vệ. Giữ nguyên quy định điều chỉnh tên đề tài luận văn như quy định hiện hành.",
+    "source": "184_Thông báo Kết luận tại Phiên họp Hội đồng học vụ ĐH&SĐH - HK232"
+  },
+  {
+    "id": "QA085",
+    "question": "Điều kiện gì để sinh viên có thể trở thành đầu khoá chính quy?",
+    "answer": "Sinh viên chính quy trở thành đầu khoá khi không được huy chương/cúp, tốt nghiệp đúng thời gian đào tạo kế hoạch, có Điểm rèn luyện: Xuất sắc, và Xếp loại tốt nghiệp từ Giỏi.",
+    "source": "184_Thông báo Kết luận tại Phiên họp Hội đồng học vụ ĐH&SĐH - HK232"
+  },
+  {
+    "id": "QA086",
+    "question": "Một ngành được xét bao nhiêu thủ khoa (Huy chương vàng)?",
+    "answer": "Mỗi ngành - Chương trình được xét 01 thủ khoa (Huy chương vàng).",
+    "source": "Kết luận HĐHV_HK231-chính thức"
+  },
+  {
+    "id": "QA087",
+    "question": "JLPT N3 cấp bao nhiêu môn tiếng Nhật miễn?",
+    "answer": "JLPT N3 cho phép miễn các môn tiếng Nhật 1, 2, 3.",
+    "source": "474_TB Kết luận tại phiên họp Hội đồng học vụ ĐH  SĐH - HK241"
+  },
+  {
+    "id": "QA088",
+    "question": "JLPT N2 cấp miễn những môn tiếng Nhật nào?",
+    "answer": "JLPT N2 cho phép miễn các môn tiếng Nhật 1, 2, 3, 4.",
+    "source": "474_TB Kết luận tại phiên họp Hội đồng học vụ ĐH  SĐH - HK241"
+  },
+  {
+    "id": "QA089",
+    "question": "JLPT N1 cấp miễn những môn tiếng Nhật nào?",
+    "answer": "JLPT N1 cấp miễn các môn tiếng Nhật 1, 2, 3, 4, 5 và 6.",
+    "source": "474_TB Kết luận tại phiên họp Hội đồng học vụ ĐH  SĐH - HK241"
+  },
+  {
+    "id": "QA090",
+    "question": "Số lượng giảng viên hướng dẫn có thể làm việc đồng hướng dẫn một học viên là bao nhiêu?",
+    "answer": "Trường hợp đồng hướng dẫn 02 học viên được tính tương đương hướng dẫn độc lập 01 học viên.",
+    "source": "184_Thông báo Kết luận tại Phiên họp Hội đồng học vụ ĐH&SĐH - HK232"
+  },
+  {
+    "id": "QA091",
+    "question": "Những học phần nào được xem là 0 tín chỉ?",
+    "answer": "Các học phần 0 tín chỉ bao gồm môn Đề cương luận văn, Giáo dục thể chất, Giáo dục quốc phòng - An ninh.",
+    "source": "Kết luận HĐHV_HK222-chính thức"
+  },
+  {
+    "id": "QA092",
+    "question": "Những học phần 0 tín chỉ được đánh giá như thế nào?",
+    "answer": "Các học phần 0 tín chỉ được đánh giá là 'Đạt' khi có điểm >= 5.0 hoặc điểm Đạt (mã 21).",
+    "source": "Kết luận HĐHV_HK222-chính thức"
+  },
+  {
+    "id": "QA093",
+    "question": "Mẫu Phiếu giao nhiệm vụ và Phiếu nhận xét LVTN sử dụng tên gọi như thế nào?",
+    "answer": "Mẫu Phiếu giao nhiệm vụ và Phiếu nhận xét LVTN dùng tên gọi chung cho cả Luận văn tốt nghiệp, Khoá luận tốt nghiệp và Đồ án tốt nghiệp.",
+    "source": "Kết luận HĐHV_HK222-chính thức"
+  },
+  {
+    "id": "QA094",
+    "question": "Danh mục môn học loại trừ được cập nhật khi nào?",
+    "answer": "Các Khoa cập nhật thường xuyên Danh mục môn học loại trừ và Danh mục nhóm môn học trùng lặp, thông báo cho sinh viên trước mỗi đợt đăng ký môn học.",
+    "source": "Kết luận HĐHV_HK222-chính thức"
+  },
+  {
+    "id": "QA095",
+    "question": "Sinh viên được học môn ngoài chương trình đào tạo để làm tín chỉ tự chọn tự do khi nào?",
+    "answer": "Khi sinh viên đăng ký môn học ngoài chương trình đào tạo ngành đang theo học để làm môn tự chọn tự do cần được sự đồng ý của cố vấn học tập (CVHT).",
+    "source": "Kết luận HĐHV_HK222-chính thức"
+  }
+]
