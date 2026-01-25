@@ -38,7 +38,7 @@ Evaluation was conducted using **RAGAS metrics** on a curated QA dataset derived
 
 ---
 
-## 🔍 Analysis & Insights
+## Analysis & Insights
 
 - **GPT-OSS** achieves the highest **faithfulness**, indicating strong grounding when relevant context is retrieved.
 - **DeepSeek v3.1** delivers the **best answer correctness**, suggesting superior reasoning and synthesis over retrieved academic regulations.
