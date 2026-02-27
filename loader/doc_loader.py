@@ -40,33 +40,28 @@ class RegulationDocumentLoader:
         return metadata
     
     def extract_metadata_from_content(self, content: str, filename: str) -> Dict[str, str]:
-        """Extract metadata from document content
-        
-        Args:
-            content: Document content
-            filename: Document filename
-            
-        Returns:
-            Dictionary with extracted metadata
-        """
         metadata = {"title": filename}
-        
-        # Extract academic year
-        year_match = re.search(Config.ACADEMIC_YEAR_PATTERN, content)
-        if year_match:
-            metadata["academic_year"] = f"{year_match.group(2)}-{year_match.group(3)}"
-        
+
+        # OCR cleaning
+        content = re.sub(r"(\d)\s+(\d)", r"\1\2", content)
+
         # Extract issue date
         for pattern in Config.DATE_PATTERNS:
-            date_match = re.search(pattern, content)
+            date_match = re.search(pattern, content, re.IGNORECASE)
             if date_match:
                 try:
                     day, month, year = date_match.groups()
+
+                    month = month.replace(" ", "")
+
+                    if len(year) == 2:
+                        year = "20" + year
+
                     metadata["issue_date"] = f"{year}-{month.zfill(2)}-{day.zfill(2)}"
                     break
-                except (ValueError, IndexError):
+                except Exception:
                     continue
-        
+
         return metadata
     
     def load_documents(self) -> List[Document]:

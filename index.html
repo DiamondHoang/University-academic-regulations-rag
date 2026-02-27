@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Chatbot Quy Định Đại Học</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Sora:wght@300;400;500;600&display=swap" rel="stylesheet" />
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg:        #0d0d0f;
+    --surface:   #151518;
+    --sidebar:   #111114;
+    --border:    rgba(255,255,255,0.07);
+    --accent:    #4f8ef7;
+    --accent2:   #a78bfa;
+    --text:      #e8e8ee;
+    --muted:     #666675;
+    --user-bg:   #1e1e28;
+    --bot-bg:    #16161c;
+    --radius:    12px;
+    --sidebar-w: 260px;
+    --font-sans: 'Sora', sans-serif;
+    --font-mono: 'IBM Plex Mono', monospace;
+    --transition: 0.18s ease;
+  }
+  html, body { height: 100%; font-family: var(--font-sans); background: var(--bg); color: var(--text); overflow: hidden; }
+
+  #app { display: flex; height: 100vh; }
+
+  /* ── Sidebar ── */
+  #sidebar {
+    width: var(--sidebar-w);
+    min-width: var(--sidebar-w);
+    background: var(--sidebar);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    transition: transform var(--transition);
+    z-index: 100;
+  }
+  #sidebar.collapsed { transform: translateX(calc(-1 * var(--sidebar-w))); position: absolute; height: 100%; }
+
+  .sidebar-header {
+    padding: 18px 16px 12px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .brand { font-size: 13px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); font-family: var(--font-mono); }
+  .brand span { color: var(--accent2); }
+
+  #new-chat-btn {
+    display: flex; align-items: center; gap: 8px;
+    padding: 9px 12px;
+    background: rgba(79,142,247,0.12);
+    border: 1px solid rgba(79,142,247,0.25);
+    border-radius: 8px;
+    color: var(--accent);
+    font-size: 13px; font-family: var(--font-sans); font-weight: 500;
+    cursor: pointer;
+    transition: background var(--transition), border-color var(--transition);
+    width: 100%; text-align: left;
+  }
+  #new-chat-btn:hover { background: rgba(79,142,247,0.2); border-color: rgba(79,142,247,0.5); }
+  #new-chat-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .sidebar-section-label { padding: 14px 16px 6px; font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-family: var(--font-mono); }
+
+  #history-list { flex: 1; overflow-y: auto; padding: 0 8px 16px; }
+  #history-list::-webkit-scrollbar { width: 4px; }
+  #history-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+  .history-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 9px 10px; border-radius: 8px; cursor: pointer;
+    transition: background var(--transition); position: relative;
+  }
+  .history-item:hover { background: rgba(255,255,255,0.05); }
+  .history-item.active { background: rgba(79,142,247,0.12); }
+  .history-item .hi-icon { color: var(--muted); flex-shrink: 0; }
+  .history-item.active .hi-icon { color: var(--accent); }
+  .hi-text { flex: 1; min-width: 0; }
+  .hi-title { font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text); }
+  .history-item.active .hi-title { color: var(--accent); font-weight: 500; }
+  .hi-meta { font-size: 10.5px; color: var(--muted); margin-top: 1px; }
+  .hi-actions { display: none; gap: 4px; position: absolute; right: 8px; }
+  .history-item:hover .hi-actions { display: flex; }
+  .hi-btn { background: none; border: none; color: var(--muted); cursor: pointer; padding: 2px; border-radius: 4px; transition: color var(--transition); }
+  .hi-btn:hover { color: var(--text); }
+
+  /* ── Main ── */
+  #main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+
+  #topbar {
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface); min-height: 52px; flex-shrink: 0;
+  }
+  #toggle-sidebar { background: none; border: none; color: var(--muted); cursor: pointer; padding: 4px; border-radius: 6px; transition: color var(--transition), background var(--transition); line-height: 1; }
+  #toggle-sidebar:hover { color: var(--text); background: rgba(255,255,255,0.06); }
+  #session-title { flex: 1; font-size: 14px; font-weight: 500; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #topbar-actions { display: flex; gap: 6px; }
+  .tb-btn { background: none; border: 1px solid var(--border); color: var(--muted); cursor: pointer; padding: 5px 10px; border-radius: 6px; font-size: 11.5px; font-family: var(--font-sans); transition: all var(--transition); }
+  .tb-btn:hover { color: var(--text); border-color: rgba(255,255,255,0.18); background: rgba(255,255,255,0.04); }
+
+  /* RAG status banner */
+  #rag-banner {
+    padding: 9px 20px; font-size: 12.5px; text-align: center;
+    background: rgba(247,180,79,0.1); border-bottom: 1px solid rgba(247,180,79,0.25);
+    color: #f7b44f; flex-shrink: 0;
+    display: none;
+  }
+  #rag-banner.error { background: rgba(247,79,79,0.1); border-color: rgba(247,79,79,0.3); color: #f74f4f; }
+
+  /* ── Messages ── */
+  #messages-wrap {
+    flex: 1; overflow-y: auto; padding: 24px 0;
+    display: flex; flex-direction: column; gap: 0;
+  }
+  #messages-wrap::-webkit-scrollbar { width: 5px; }
+  #messages-wrap::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+  .message-row { display: flex; justify-content: flex-start; padding: 6px 20px; animation: fadeUp 0.22s ease forwards; opacity: 0; }
+  @keyframes fadeUp { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+  .message-row.user { justify-content: flex-end; }
+
+  .bubble { max-width: min(680px, 86%); padding: 12px 16px; border-radius: var(--radius); font-size: 14px; line-height: 1.7; white-space: pre-wrap; word-break: break-word; }
+  .bubble.user { background: var(--user-bg); border: 1px solid rgba(167,139,250,0.18); color: #d8d8e8; border-bottom-right-radius: 3px; }
+  .bubble.bot  { background: var(--bot-bg);  border: 1px solid var(--border); color: var(--text); border-bottom-left-radius: 3px; }
+  .bubble.thinking { color: var(--muted); font-style: italic; font-size: 13px; }
+
+  .typing-dots { display: inline-flex; gap: 4px; align-items: center; }
+  .typing-dots span { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--muted); animation: blink 1.2s infinite; }
+  .typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+  .typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes blink { 0%,80%,100% { opacity:0.25; transform:scale(0.85); } 40% { opacity:1; transform:scale(1); } }
+
+  /* ── Welcome ── */
+  #welcome { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px; padding:40px 20px; text-align:center; color:var(--muted); }
+  .welcome-icon { width:56px; height:56px; background:linear-gradient(135deg,rgba(79,142,247,0.2),rgba(167,139,250,0.2)); border:1px solid rgba(79,142,247,0.3); border-radius:16px; display:flex; align-items:center; justify-content:center; font-size:26px; }
+  #welcome h2 { font-size:22px; font-weight:600; color:var(--text); }
+  #welcome p { font-size:14px; max-width:380px; line-height:1.6; }
+  .welcome-chips { display:flex; flex-wrap:wrap; gap:8px; justify-content:center; margin-top:4px; }
+  .chip { padding:8px 14px; background:rgba(255,255,255,0.04); border:1px solid var(--border); border-radius:20px; font-size:12.5px; cursor:pointer; transition:all var(--transition); color:var(--text); }
+  .chip:hover { background:rgba(79,142,247,0.1); border-color:rgba(79,142,247,0.4); color:var(--accent); }
+
+  /* Loading shimmer on welcome while RAG initializes */
+  #welcome.initializing h2,
+  #welcome.initializing p { opacity: 0.4; }
+  #welcome.initializing .welcome-icon { animation: pulse 1.5s ease infinite; }
+  @keyframes pulse { 0%,100% { opacity:0.5; } 50% { opacity:1; } }
+
+  /* ── Input ── */
+  #input-area { padding: 14px 20px 18px; border-top: 1px solid var(--border); background: var(--surface); flex-shrink: 0; }
+  #input-wrap { display:flex; align-items:flex-end; gap:10px; background:var(--bg); border:1px solid var(--border); border-radius:var(--radius); padding:10px 12px 10px 16px; transition:border-color var(--transition),box-shadow var(--transition); }
+  #input-wrap:focus-within { border-color:rgba(79,142,247,0.45); box-shadow:0 0 0 3px rgba(79,142,247,0.08); }
+  #user-input { flex:1; background:none; border:none; outline:none; color:var(--text); font-family:var(--font-sans); font-size:14px; line-height:1.6; resize:none; max-height:160px; min-height:24px; overflow-y:auto; }
+  #user-input::placeholder { color:var(--muted); }
+  #send-btn { background:var(--accent); border:none; color:#fff; width:34px; height:34px; border-radius:8px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:background var(--transition),transform var(--transition); flex-shrink:0; }
+  #send-btn:hover { background:#3a7ae0; }
+  #send-btn:active { transform:scale(0.92); }
+  #send-btn:disabled { background:rgba(79,142,247,0.3); cursor:not-allowed; }
+  .input-hint { font-size:11px; color:var(--muted); margin-top:8px; text-align:center; }
+
+  @media (max-width:600px) {
+    #sidebar { position:absolute; height:100%; }
+    #sidebar:not(.collapsed) { box-shadow:4px 0 24px rgba(0,0,0,0.5); }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- Sidebar -->
+  <aside id="sidebar">
+    <div class="sidebar-header">
+      <div class="brand">Uni<span>Rag</span> Chat</div>
+      <button id="new-chat-btn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+        New conversation
+      </button>
+    </div>
+    <div class="sidebar-section-label">History</div>
+    <div id="history-list"></div>
+  </aside>
+
+  <!-- Main -->
+  <div id="main">
+    <div id="topbar">
+      <button id="toggle-sidebar" title="Toggle sidebar">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/></svg>
+      </button>
+      <div id="session-title">Initializing…</div>
+      <div id="topbar-actions">
+        <button class="tb-btn" id="clear-btn" style="display:none">Clear</button>
+      </div>
+    </div>
+
+    <!-- Status banner (hidden until needed) -->
+    <div id="rag-banner"></div>
+
+    <!-- Chat is ALWAYS visible — no "no session" screen -->
+    <div id="chat-area" style="flex:1; display:flex; flex-direction:column; min-height:0; overflow:hidden;">
+      <div id="messages-wrap">
+        <div id="welcome" class="initializing">
+          <div class="welcome-icon">🎓</div>
+          <h2>University Regulation Assistant</h2>
+          <p>Ask anything about university regulations, policies, academic procedures, and student guidelines.</p>
+          <div class="welcome-chips">
+            <div class="chip" onclick="sendChip(this)">Điều kiện tốt nghiệp là gì?</div>
+            <div class="chip" onclick="sendChip(this)">Thủ tục xin bảo lưu học phần</div>
+            <div class="chip" onclick="sendChip(this)">Quy định về điểm thành phần</div>
+            <div class="chip" onclick="sendChip(this)">Cách tính điểm GPA</div>
+          </div>
+        </div>
+      </div>
+      <div id="input-area">
+        <div id="input-wrap">
+          <textarea id="user-input" rows="1" placeholder="Initializing RAG…" maxlength="2000" disabled></textarea>
+          <button id="send-btn" disabled title="Send">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+          </button>
+        </div>
+        <div class="input-hint">Enter to send · Shift+Enter for newline</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+<script>
+const API = '';
+let currentSessionId = null;
+let sessions = {};
+let isLoading = false;
+let _ragReady = false;
+
+// ── DOM refs ──────────────────────────────────────────────────────────────
+const sendBtn    = document.getElementById('send-btn');
+const newChatBtn = document.getElementById('new-chat-btn');
+const userInput  = document.getElementById('user-input');
+const ragBanner  = document.getElementById('rag-banner');
+const sessionTitle = document.getElementById('session-title');
+const clearBtn   = document.getElementById('clear-btn');
+
+// ── Utils ─────────────────────────────────────────────────────────────────
+function fmtDate(iso) {
+  const d = new Date(iso), now = new Date(), diff = (now - d) / 1000;
+  if (diff < 60) return 'just now';
+  if (diff < 3600) return Math.floor(diff/60) + 'm ago';
+  if (diff < 86400) return Math.floor(diff/3600) + 'h ago';
+  return d.toLocaleDateString('vi-VN');
+}
+function escapeHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+userInput.addEventListener('input', () => {
+  userInput.style.height = 'auto';
+  userInput.style.height = Math.min(userInput.scrollHeight, 160) + 'px';
+});
+
+// ── RAG ready state ───────────────────────────────────────────────────────
+function setRagReady(ready, errorMsg) {
+  _ragReady = ready;
+  if (ready) {
+    ragBanner.style.display = 'none';
+    sendBtn.disabled = false;
+    newChatBtn.disabled = false;
+    userInput.disabled = false;
+    userInput.placeholder = 'Ask about university regulations…';
+    document.getElementById('welcome').classList.remove('initializing');
+  } else if (errorMsg) {
+    ragBanner.style.display = '';
+    ragBanner.className = 'error';
+    ragBanner.textContent = '❌ RAG failed to load: ' + errorMsg;
+    sendBtn.disabled = true;
+    newChatBtn.disabled = true;
+    userInput.disabled = true;
+    userInput.placeholder = 'RAG initialization failed.';
+  } else {
+    ragBanner.style.display = '';
+    ragBanner.className = '';
+    ragBanner.textContent = '⏳ RAG system is initializing, please wait…';
+    sendBtn.disabled = true;
+    newChatBtn.disabled = true;
+    userInput.disabled = true;
+    userInput.placeholder = 'Initializing RAG…';
+  }
+}
+
+// ── API ───────────────────────────────────────────────────────────────────
+async function apiFetch(path, options = {}) {
+  const res = await fetch(API + path, {
+    headers: { 'Content-Type': 'application/json' },
+    ...options,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+// ── Sessions ──────────────────────────────────────────────────────────────
+async function loadSessions() {
+  try {
+    const list = await apiFetch('/sessions');
+    sessions = {};
+    list.forEach(s => { sessions[s.session_id] = s; });
+    renderHistoryList();
+  } catch(e) {
+    console.error('loadSessions failed:', e);
+  }
+}
+
+async function createSession() {
+  try {
+    const s = await apiFetch('/sessions', { method: 'POST' });
+    sessions[s.session_id] = { ...s, messages: [], message_count: 0 };
+    renderHistoryList();
+    await selectSession(s.session_id);
+  } catch(e) {
+    console.error('[createSession] failed:', e);
+    ragBanner.style.display = '';
+    ragBanner.className = 'error';
+    ragBanner.textContent = '❌ Could not create session: ' + e.message;
+  }
+}
+
+async function selectSession(id) {
+  currentSessionId = id;
+  const data = await apiFetch(`/sessions/${id}`);
+  sessions[id] = { ...sessions[id], ...data };
+  renderChat(data);
+  renderHistoryList();
+  sessionTitle.textContent = data.title;
+  clearBtn.style.display = '';
+}
+
+async function deleteSession(id, e) {
+  e.stopPropagation();
+  await apiFetch(`/sessions/${id}`, { method: 'DELETE' });
+  delete sessions[id];
+  if (currentSessionId === id) {
+    // Auto-create a new session after deleting current
+    currentSessionId = null;
+    await createSession();
+  }
+  renderHistoryList();
+}
+
+async function clearHistory() {
+  if (!currentSessionId) return;
+  await apiFetch(`/sessions/${currentSessionId}/history`, { method: 'DELETE' });
+  sessions[currentSessionId].messages = [];
+  renderChat({ messages: [], title: sessions[currentSessionId].title });
+}
+
+// ── Render ────────────────────────────────────────────────────────────────
+function renderHistoryList() {
+  const list = document.getElementById('history-list');
+  const items = Object.values(sessions).sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+  if (!items.length) {
+    list.innerHTML = '<div style="padding:12px 16px;font-size:12px;color:var(--muted)">No conversations yet</div>';
+    return;
+  }
+  list.innerHTML = items.map(s => `
+    <div class="history-item ${s.session_id === currentSessionId ? 'active' : ''}" onclick="selectSession('${s.session_id}')">
+      <svg class="hi-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+      <div class="hi-text">
+        <div class="hi-title">${escapeHtml(s.title)}</div>
+        <div class="hi-meta">${fmtDate(s.created_at)} · ${s.message_count ?? (s.messages?.length ?? 0)} msgs</div>
+      </div>
+      <div class="hi-actions">
+        <button class="hi-btn" title="Delete" onclick="deleteSession('${s.session_id}', event)">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+        </button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderChat(data) {
+  const wrap = document.getElementById('messages-wrap');
+  const welcome = document.getElementById('welcome');
+  Array.from(wrap.querySelectorAll('.message-row')).forEach(el => el.remove());
+  if (!data.messages || data.messages.length === 0) {
+    welcome.style.display = '';
+    return;
+  }
+  welcome.style.display = 'none';
+  data.messages.forEach(m => appendBubble(m.role, m.content, false));
+  scrollBottom();
+}
+
+function appendBubble(role, content, animate = true) {
+  const wrap = document.getElementById('messages-wrap');
+  document.getElementById('welcome').style.display = 'none';
+  const row = document.createElement('div');
+  row.className = `message-row ${role}`;
+  if (!animate) row.style.animationDuration = '0s';
+  const bubble = document.createElement('div');
+  bubble.className = `bubble ${role === 'user' ? 'user' : 'bot'}`;
+  bubble.textContent = content;
+  row.appendChild(bubble);
+  wrap.appendChild(row);
+  scrollBottom();
+  return row;
+}
+
+function addThinkingBubble() {
+  const wrap = document.getElementById('messages-wrap');
+  const row = document.createElement('div');
+  row.className = 'message-row'; row.id = 'thinking-row';
+  row.innerHTML = `<div class="bubble bot thinking"><span class="typing-dots"><span></span><span></span><span></span></span></div>`;
+  wrap.appendChild(row);
+  scrollBottom();
+}
+function removeThinkingBubble() { document.getElementById('thinking-row')?.remove(); }
+function scrollBottom() {
+  const wrap = document.getElementById('messages-wrap');
+  wrap.scrollTop = wrap.scrollHeight;
+}
+
+// ── Send ──────────────────────────────────────────────────────────────────
+async function send(text) {
+  if (!_ragReady || isLoading) return;
+  text = text.trim();
+  if (!text) return;
+
+  // Session is always pre-created by the time user sends — but just in case:
+  if (!currentSessionId) {
+    if (_sessionCreating) {
+      // Session is mid-creation, wait for it
+      await _sessionCreating;
+    }
+    if (!currentSessionId) return;
+  }
+
+  isLoading = true;
+  sendBtn.disabled = true;
+  userInput.value = '';
+  userInput.style.height = 'auto';
+
+  appendBubble('user', text);
+  addThinkingBubble();
+
+  try {
+    const res = await apiFetch('/chat', {
+      method: 'POST',
+      body: JSON.stringify({ session_id: currentSessionId, message: text }),
+    });
+    removeThinkingBubble();
+    appendBubble('assistant', res.answer);
+
+    // Refresh session title
+    if (sessions[currentSessionId]) {
+      const s = sessions[currentSessionId];
+      if (!s.messages) s.messages = [];
+      s.messages.push({ role: 'user', content: text });
+      s.messages.push({ role: 'assistant', content: res.answer });
+      s.message_count = s.messages.length;
+      try {
+        const full = await apiFetch(`/sessions/${currentSessionId}`);
+        sessions[currentSessionId].title = full.title;
+        sessionTitle.textContent = full.title;
+      } catch(_) {}
+    }
+    renderHistoryList();
+  } catch(e) {
+    removeThinkingBubble();
+    appendBubble('assistant', `⚠️ Error: ${e.message}`);
+  } finally {
+    isLoading = false;
+    sendBtn.disabled = false;
+    userInput.focus();
+  }
+}
+
+function sendChip(el) { send(el.textContent); }
+
+// ── Event bindings ────────────────────────────────────────────────────────
+newChatBtn.addEventListener('click', createSession);
+clearBtn.addEventListener('click', clearHistory);
+sendBtn.addEventListener('click', () => send(userInput.value));
+userInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(userInput.value); }
+});
+document.getElementById('toggle-sidebar').addEventListener('click', () => {
+  document.getElementById('sidebar').classList.toggle('collapsed');
+});
+
+// ── Health polling + auto init ────────────────────────────────────────────
+let _sessionCreating = null; // holds the in-flight createSession() promise
+
+async function pollHealth() {
+  try {
+    const res = await fetch(API + '/health');
+    const data = await res.json();
+    if (data.status === 'ok') {
+      setRagReady(true);
+      // Pre-create session immediately in background (don't await — non-blocking)
+      if (!currentSessionId && !_sessionCreating) {
+        _sessionCreating = createSession().finally(() => { _sessionCreating = null; });
+      }
+      return;
+    }
+    if (data.status === 'error') { setRagReady(false, data.detail); return; }
+  } catch(_) { /* server not up yet */ }
+  setTimeout(pollHealth, 2500);
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────
+setRagReady(false);  // disable inputs until ready
+
+(async () => {
+  await loadSessions();
+  // Restore most recent session if exists
+  const sorted = Object.values(sessions).sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+  if (sorted.length > 0) {
+    await selectSession(sorted[0].session_id);
+  }
+  // Start polling — will enable inputs and create session if needed once RAG is ready
+  pollHealth();
+})();
+</script>
+</body>
+</html>

@@ -43,10 +43,7 @@ class UniversityRAG:
         # Initialize modular components
         self.query_analyzer = QueryAnalyzer(self.llm)
         self.retriever: Optional[HybridRetriever] = None
-        self.response_generator = ResponseGenerator(
-            self.llm,
-            max_context_length=self.config["max_context_length"]
-        )
+        self.response_generator = ResponseGenerator(self.llm)
         self.memory = ConversationMemory(
             max_history=self.config["max_history"]
         )
@@ -214,10 +211,19 @@ class UniversityRAG:
                 self.memory.add_turn(question, answer)
                 return answer
             
-            ranked_docs = self.retriever.rank_by_recency(retrieved_docs)[:3]
+            ranked_docs = retrieved_docs[:3]
             conv_history = self.memory.get_context_string(include_last_n=2)
-            result = self.response_generator.generate(question, ranked_docs, conv_history, intent)
-            answer = result["answer"] + clarification
+            gen_result = self.response_generator.generate(
+                query=question,
+                documents=ranked_docs,
+                conversation_history=conv_history,
+                analysis=intent,
+                clean_mode=False,
+            )
+
+            # ResponseGenerator returns a dict with 'answer', 'confidence', 'sources'
+            answer = gen_result.get("answer", "") + clarification
+            confidence = gen_result.get("confidence", 0.0)
             
             turn_data = {
                 "question": question,

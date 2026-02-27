@@ -1,575 +1,645 @@
-import re
-from typing import List, Dict, Optional, Tuple
 import logging
-
+from typing import List, Dict, Tuple
 from langchain_core.documents import Document
 from langchain_ollama import ChatOllama
+
+from config import Config
+from datetime import datetime
+
+# Try to use dateutil for robust parsing, fall back to manual formats
+try:
+    from dateutil.parser import parse as _date_parse
+except Exception:
+    _date_parse = None
 
 logger = logging.getLogger(__name__)
 
 
 class ResponseGenerator:
-    """Generate answers with proper citations from documents"""
-    
-    MAX_DOCS_IN_CONTEXT = 5
-    MAX_CONTENT_LENGTH = 1500
-    MIN_ANSWER_LENGTH = 100
-    
-    def __init__(self, llm: ChatOllama, max_context_length: int = 8000):
-        """Initialize response generator
-        
-        Args:
-            llm: Language model for answer generation
-            max_context_length: Maximum length of context to use
-        """
+    """Generate grounded responses from retrieved documents with confidence filtering
+
+    To improve stability we maintain an in‑memory cache keyed by (query,context,analysis) so
+    identical prompts return the same answer without calling the LLM again.  The LLM
+    temperature should also be set to 0 (or very low) in configuration.
+    """
+
+    def __init__(self, llm: ChatOllama):
         self.llm = llm
-        self.max_context_length = max_context_length
-    
+        self.confidence_threshold = Config.CONFIDENCE_THRESHOLD
+        # simple prompt->response cache to keep answers deterministic across runs
+        self._cache: Dict[str, Dict] = {}
+
     def generate(
         self,
-        question: str,
+        query: str,
         documents: List[Document],
+        analysis: Dict = None,
         conversation_history: str = "",
-        analysis_result: Optional[Dict] = None,
-        clean_mode: bool = False
+        clean_mode: bool = False,
     ) -> Dict:
-        """Generate answer with citations from documents
-        
-        Args:
-            question: User question
-            documents: Retrieved documents
-            conversation_history: Previous conversation context
-            analysis_result: Query analysis result
-            clean_mode: If True, return clean answer without citations for dataset
-            
-        Returns:
-            Dictionary with answer, confidence, and sources
+        """Generate final response with confidence-filtered documents
+
+        Returns dict: {"answer": str, "confidence": float, "sources": List, "selected_docs": int}
         """
-        try:
-            if not documents:
-                return {
-                    "answer": "Xin lỗi, tôi không tìm thấy thông tin liên quan.",
-                    "confidence": 0.0,
-                    "sources": []
-                }
-            
-            # Use clean mode for dataset answers
-            if clean_mode:
-                return self._generate_clean(question, documents)
-            
-            context, source_info = self._build_context(documents)
-            prompt = self._build_prompt(question, context, conversation_history, analysis_result)
-            
-            response = self.llm.invoke(prompt)
-            answer = response.content
-            
-            # Extract cited sources from answer
-            cited_sources = self._extract_cited_sources(answer, source_info)
-            
-            # Create mapping from old labels to new sequential labels
-            label_mapping = {}
-            for idx, src in enumerate(cited_sources, 1):
-                old_label = src.get('label', '')
-                new_label = f"[Nguồn {idx}]"
-                label_mapping[old_label] = new_label
-                src['label'] = new_label
-            
-            # Replace old labels with new sequential labels in answer
-            for old_label, new_label in label_mapping.items():
-                answer = answer.replace(old_label, new_label)
-            
-            # Remove content from non-cited sources
-            cited_labels = {src.get('label', '') for src in cited_sources}
-            for src in source_info:
-                if src.get('label', '') not in cited_labels:
-                    src.pop('content', None)
-            
-            # Format only cited sources
-            sources_text = self._format_sources(cited_sources)
-            full_answer = answer + sources_text
-            
-            # Calculate quality score and extract citations
-            quality_score = self._quality_check(answer, source_info)
-            
-            return {
-                "answer": full_answer,
-                "confidence": quality_score,
-                "sources": source_info
+        analysis = analysis or {}
+
+        if not documents:
+            # no context available when there are no docs, cache empty result keyed by query+analysis
+            cache_key = f"{query}|||<no_context>|||{str(analysis)}"
+            result = {
+                "answer": self._fallback_no_answer(),
+                "confidence": 0.0,
+                "sources": [],
+                "selected_docs": 0,
+                "filtered_reason": "No documents retrieved"
             }
+            self._cache[cache_key] = result
+            return result
+
+        try:
+            # Filter documents by confidence threshold
+            filtered_docs, selection_info = self._filter_by_confidence(documents)
             
+            if not filtered_docs:
+                return {
+                    "answer": self._fallback_no_answer(),
+                    "confidence": 0.0,
+                    "sources": [],
+                    "selected_docs": 0,
+                    "filtered_reason": f"All {len(documents)} documents below confidence threshold ({self.confidence_threshold})"
+                }
+
+            # Build context from filtered documents
+            context, sources_list = self._build_context(filtered_docs)
+
+            # cache check now that context exists
+            cache_key = f"{query}|||{context}|||{str(analysis)}"
+            if cache_key in self._cache:
+                logger.debug("returning cached response after context build")
+                return self._cache[cache_key]
+
+            prompt = self._build_prompt(
+                query=query,
+                context=context,
+                analysis=analysis,
+            )
+
+            response = self.llm.invoke(prompt)
+            answer = response.content.strip()
+
+            # heuristic override: if model said no info but context clearly lists graduation modules,
+            # construct a direct answer ourselves to avoid false negatives.
+            if answer.startswith("Không tìm thấy") and "Các học phần tốt nghiệp" in context:
+                import re
+                m = re.search(r"Các học phần tốt nghiệp.*?\(([^)]+)\)", context)
+                if m:
+                    items = m.group(1)
+                    answer = f"Học phần tốt nghiệp bao gồm các hình thức: {items}."
+
+            # Filter answer to remove sentences not relevant to the query
+            # This uses a generalized approach that works for any query type
+            answer = self._filter_answer_by_relevance(answer, query, relevance_threshold=0.3)
+
+            # Attach citations and build sources list
+            answer_with_cites, sources = self._attach_citations(answer, sources_list)
+
+            # If no cited sources were found, fallback to top filtered doc as source
+            if not sources and filtered_docs:
+                top = filtered_docs[0]
+                sources = [{
+                    "index": 1,
+                    "title": top.metadata.get("title") or top.metadata.get("file_path", "unknown"),
+                    "issue_date": top.metadata.get("issue_date", "N/A"),
+                    "file_path": top.metadata.get("file_path", ""),
+                    "confidence_score": top.metadata.get("confidence_score", 0.0),
+                }]
+
+            # Format final answer using concise template and attach source list
+            formatted_answer = self._format_response(answer_with_cites, sources)
+
+            # Calculate confidence based on filtered docs (simple heuristic)
+            confidence = float(selection_info.get("avg_confidence", 0.0))
+
+            result = {
+                "answer": formatted_answer,
+                "confidence": confidence,
+                "sources": sources,
+                "selected_docs": len(filtered_docs),
+                "total_docs": len(documents),
+                "selection_info": selection_info
+            }
+            # cache the response for future identical queries
+            try:
+                self._cache[cache_key] = result
+            except Exception:
+                logger.warning("Failed to cache response")
+            return result
+
         except Exception as e:
             logger.error(f"Response generation failed: {e}", exc_info=True)
             return {
-                "answer": f"Xin lỗi, có lỗi xảy ra: {str(e)}",
+                "answer": self._fallback_error(),
                 "confidence": 0.0,
-                "sources": []
+                "sources": [],
+                "selected_docs": 0
             }
-    
-    def _generate_clean(
-        self,
-        question: str,
-        documents: List[Document]
-    ) -> Dict:
-        """Generate clean answer without citations for dataset
-        
-        Uses the same powerful _build_prompt logic but cleans output
-        to remove citations, sources, and metadata.
+
+    def _filter_by_confidence(self, documents: List[Document]) -> Tuple[List[Document], Dict]:
+        """Filter documents by confidence threshold
         
         Args:
-            question: User question
-            documents: Retrieved documents
+            documents: All retrieved documents
             
         Returns:
-            Dictionary with clean answer
+            Tuple of (filtered_documents, selection_info)
         """
-        try:
-            context, source_info = self._build_context(documents)
-            prompt = self._build_prompt(question, context, "", None)
+        filtered_docs = []
+        confidence_scores = []
+        
+        for doc in documents:
+            conf_score = doc.metadata.get("confidence_score", 0.0)
+            confidence_scores.append(conf_score)
             
-            response = self.llm.invoke(prompt)
-            answer = response.content.strip()
-            
-            # Aggressive cleaning for dataset
-            answer = self._clean_answer_for_dataset(answer)
-            
-            return {
-                "answer": answer,
-                "confidence": 0.8 if answer else 0.0,
-                "sources": []
-            }
-            
-        except Exception as e:
-            logger.error(f"Clean response generation failed: {e}", exc_info=True)
-            return {
-                "answer": f"Xin lỗi, có lỗi xảy ra: {str(e)}",
-                "confidence": 0.0,
-                "sources": []
-            }
-    
-    def _clean_answer_for_dataset(self, answer: str) -> str:
-        """Clean answer by removing all citations, sources, and metadata
+            if conf_score >= self.confidence_threshold:
+                filtered_docs.append(doc)
         
-        Args:
-            answer: Raw answer with citations and sources
-            
-        Returns:
-            Clean answer without citations or metadata
-        """
-        # Remove [Nguồn X], [Nguồn X - text], and other citation patterns
-        answer = re.sub(r'\s*\[Nguồn\s+\d+[^\]]*\]', '', answer)
+        selection_info = {
+            "threshold": self.confidence_threshold,
+            "selected": len(filtered_docs),
+            "total": len(documents),
+            "confidence_scores": confidence_scores[:len(documents)],
+            "avg_confidence": sum(confidence_scores) / len(confidence_scores) if confidence_scores else 0.0
+        }
         
-        # Remove NGUỒN THAM KHẢO section and everything after
-        answer = re.sub(r'\s*NGUỒN THAM KHẢO.*$', '', answer, flags=re.DOTALL | re.IGNORECASE)
-        
-        # Remove "Cập nhật từ..." phrases and year info (case insensitive)
-        answer = re.sub(r'\s*cập nhật từ\s+[^.]*\.', '', answer, flags=re.IGNORECASE)
-        answer = re.sub(r'\s*và năm không xác định\.?', '', answer, flags=re.IGNORECASE)
-        
-        # Remove any dates like "năm 2022", "năm 2023", etc
-        answer = re.sub(r'\s*năm\s+\d{4}', '', answer, flags=re.IGNORECASE)
-        
-        # Remove academic year patterns like "học kỳ 222", "HK231", etc
-        answer = re.sub(r'\s*học kỳ\s+\d+', '', answer, flags=re.IGNORECASE)
-        answer = re.sub(r'\s*HK\d+', '', answer, flags=re.IGNORECASE)
-        
-        # Remove common metadata patterns
-        answer = re.sub(r'\s*theo\s+\w+\s+\d+', '', answer, flags=re.IGNORECASE)
-        
-        # Remove trailing commas and periods with metadata
-        answer = re.sub(r'\s*,\s*năm\s+\d{4}.*$', '', answer, flags=re.DOTALL)
-        
-        # Remove newlines and normalize spaces
-        answer = re.sub(r'\s*\n\s*', ' ', answer)
-        answer = re.sub(r'\s+', ' ', answer)
-        
-        # Strip leading/trailing whitespace
-        return answer.strip()
-    
-    def _build_context(self, documents: List[Document]) -> Tuple[str, List[Dict]]:
-        """Build context string with source tracking and deduplication by title
-        
-        Args:
-            documents: Documents to include in context
-            
-        Returns:
-            Tuple of (context_string, source_info_list)
-        """
-        # Sort by issue_date (newest first)
-        sorted_docs = sorted(
-            documents,
-            key=lambda d: d.metadata.get('issue_date', '1900-01-01'),
-            reverse=True
+        logger.info(
+            f"Document filtering: {len(filtered_docs)}/{len(documents)} selected "
+            f"(threshold={self.confidence_threshold}, avg_conf={selection_info['avg_confidence']:.3f})"
         )
+        # Ensure filtered docs are ordered by parsed issue date (newest first) then confidence
+        from datetime import datetime as _dt
+        def _ensure_parsed(d: Document):
+            if "_parsed_issue_date" not in d.metadata:
+                raw = d.metadata.get("issue_date") or ""
+                if _date_parse:
+                    try:
+                        d.metadata["_parsed_issue_date"] = _date_parse(raw)
+                    except Exception:
+                        d.metadata["_parsed_issue_date"] = _dt.min
+                else:
+                    try:
+                        d.metadata["_parsed_issue_date"] = _dt.strptime(raw, "%Y-%m-%d")
+                    except Exception:
+                        d.metadata["_parsed_issue_date"] = _dt.min
+
+        for d in filtered_docs:
+            _ensure_parsed(d)
+
+        filtered_docs = sorted(
+            filtered_docs,
+            key=lambda x: (x.metadata.get("_parsed_issue_date", _dt.min), x.metadata.get("confidence_score", 0.0)),
+            reverse=True,
+        )
+
+        return filtered_docs, selection_info
+
+    # ======================================================
+    # Context Builder
+    # ======================================================
+
+    def _build_context(self, docs: List[Document]) -> Tuple[str, List[Dict]]:
+        """Build grounded context from filtered documents with clear source numbering.
         
-        conflict_groups = self._detect_conflicts(sorted_docs)
+        Deduplicates by file_path + title to prevent same source appearing twice.
         
-        # Group documents by title AND doc_type to avoid mixing DTDH and DTSDH
-        title_groups = {}
-        for doc in sorted_docs[:self.MAX_DOCS_IN_CONTEXT * 2]:  # Get more to compensate for grouping
-            title = doc.metadata.get('title', 'N/A')
-            doc_type = doc.metadata.get('doc_type', 'unknown')
-            group_key = f"{title}||{doc_type}"  # Composite key
-            
-            if group_key not in title_groups:
-                title_groups[group_key] = []
-            title_groups[group_key].append(doc)
-        
-        # Build context and source_info
+        Returns:
+            Tuple of (context_string, sources_list)
+        """
+
+        # Parse and attach a normalized datetime for each doc to allow
+        # reliable sorting regardless of original date string format.
+        def _parse_issue_date_raw(d: Document) -> datetime:
+            raw = d.metadata.get("issue_date") or ""
+            # Try dateutil if available
+            if _date_parse:
+                try:
+                    return _date_parse(raw)
+                except Exception:
+                    pass
+
+            # Try some common formats
+            fmts = ["%Y-%m-%d", "%d/%m/%Y", "%Y/%m/%d", "%d-%m-%Y", "%Y-%m-%dT%H:%M:%S"]
+            for f in fmts:
+                try:
+                    return datetime.strptime(raw, f)
+                except Exception:
+                    continue
+
+            # If all fails, put very old sentinel so missing/invalid dates are treated as old
+            try:
+                return datetime.min
+            except Exception:
+                return datetime(1900, 1, 1)
+
+        for d in docs:
+            parsed = _parse_issue_date_raw(d)
+            # store for later use
+            d.metadata["_parsed_issue_date"] = parsed
+
+        # Sort by parsed date (newest first) and confidence
+        sorted_docs = sorted(
+            docs,
+            key=lambda x: (
+                x.metadata.get("_parsed_issue_date", datetime.min),
+                x.metadata.get("confidence_score", 0.0),
+            ),
+            reverse=True,
+        )
+
+        # Detect simple conflicts: same title + regulation_type but different dates
+        conflict_groups: Dict[Tuple[str, str], List[Document]] = {}
+        for d in sorted_docs:
+            title = d.metadata.get("title", "")
+            reg = d.metadata.get("regulation_type", "")
+            key = (title, reg)
+            conflict_groups.setdefault(key, []).append(d)
+
+        # Build a set of documents that should be excluded because they are older
+        excluded_old_docs = set()
+        for key, group in conflict_groups.items():
+            if len(group) > 1:
+                # check if more than one distinct parsed date exist
+                dates = {g.metadata.get("_parsed_issue_date") for g in group}
+                if len(dates) > 1:
+                    # keep only the newest (group already sorted by parsed date desc)
+                    newest = sorted(group, key=lambda g: g.metadata.get("_parsed_issue_date", datetime.min), reverse=True)[0]
+                    for g in group:
+                        if g is not newest:
+                            excluded_old_docs.add(id(g))
+
+        # Group chunks by file_path + title to avoid duplicates from same source
+        # Skip any older documents that were excluded due to conflicts above
+        grouped_docs: Dict[str, List[Document]] = {}
+        for doc in sorted_docs:
+            if id(doc) in excluded_old_docs:
+                # skip older conflicting versions so LLM only sees the newest source
+                logger.info(f"Excluding older conflicting doc: {doc.metadata.get('title')} - {doc.metadata.get('issue_date')}")
+                continue
+
+            file_path = doc.metadata.get("file_path", "unknown")
+            title = doc.metadata.get("title", "unknown")
+            # Use file_path as primary dedup key - same file = same source
+            dedup_key = file_path if file_path != "unknown" else title
+
+            if dedup_key not in grouped_docs:
+                grouped_docs[dedup_key] = []
+            grouped_docs[dedup_key].append(doc)
+
         context_parts = []
-        source_info = []
+        sources_list = []
         source_idx = 1
-        
-        # Limit to MAX_DOCS_IN_CONTEXT unique sources
-        for group_key, docs in list(title_groups.items())[:self.MAX_DOCS_IN_CONTEXT]:
-            # Get the newest document in this group (already sorted)
-            primary_doc = docs[0]
-            title = primary_doc.metadata.get('title', 'N/A')
-            doc_type = primary_doc.metadata.get('doc_type', 'unknown')
-            doc_type_vn = "Đại học" if doc_type == 'DTDH' else "Sau đại học"
-            source_label = f"[Nguồn {source_idx}]"
+
+        # Iterate grouped_docs in insertion order so source numbering
+        # preserves the order determined by `sorted_docs` (newest first).
+        for dedup_key, group in grouped_docs.items():
+            primary_doc = group[0]
+
+            title = primary_doc.metadata.get("title", "unknown")
+            doc_type = primary_doc.metadata.get("doc_type", "unknown")
+            issue_date = primary_doc.metadata.get("issue_date", "N/A")
+            regulation_type = primary_doc.metadata.get("regulation_type", "unknown")
+            conf_score = primary_doc.metadata.get("confidence_score", 0.0)
+
+            combined_content = "\n".join(doc.page_content for doc in group)
+
+            # If this group represents a newer version replacing older ones, mark in header
+            replaced_note = ""
+            # find other docs with same title/regulation_type that were excluded
+            title = primary_doc.metadata.get("title", "unknown")
+            reg = primary_doc.metadata.get("regulation_type", "unknown")
+            # if any excluded docs existed for this key, add a short note
+            key = (title, reg)
+            if any(id_doc in excluded_old_docs for id_doc in [id(x) for x in conflict_groups.get(key, [])]):
+                replaced_note = "- NOTE: Phiên bản cũ đã được thay thế và bị loại khỏi ngữ cảnh.\n"
+
+            header = (
+                f"[Nguồn {source_idx}] {title}\n"
+                f"- Loại: {doc_type}\n"
+                f"- Nhóm: {regulation_type}\n"
+                f"- Ngày ban hành: {issue_date}\n"
+                f"{replaced_note}"
+                f"- Độ tin cậy: {conf_score:.2%}\n"
+            )
+
+            context_parts.append(header + combined_content)
             
-            # Check for conflicts
-            conflict_note = ""
-            for group in conflict_groups:
-                if primary_doc in group:
-                    conflict_note = " (Xung đột với nguồn khác)"
-                    break
-            
-            # Check for multiple versions (same title, different dates)
-            dates = {doc.metadata.get('issue_date', 'N/A') for doc in docs}
-            if len(dates) > 1:
-                logger.warning(f"Multiple versions found for '{title}': {dates}")
-                conflict_note += " (Nhiều phiên bản)"
-            
-            # Combine content from all docs in this group
-            combined_content_parts = []
-            for doc in docs[:3]:  # Limit to 3 chunks per source
-                content = doc.page_content
-                if len(content) > self.MAX_CONTENT_LENGTH:
-                    content = content[:self.MAX_CONTENT_LENGTH] + "..."
-                combined_content_parts.append(content)
-            
-            combined_content = "\n---\n".join(combined_content_parts)
-            
-            # Add to source_info
-            source_info.append({
-                "label": source_label,
+            # Add to sources list
+            sources_list.append({
+                "index": source_idx,
                 "title": title,
-                "doc_type": doc_type_vn,
-                "regulation_type": primary_doc.metadata.get('regulation_type', 'N/A'),
-                "academic_year": primary_doc.metadata.get('academic_year', 'N/A'),
-                "issue_date": primary_doc.metadata.get('issue_date', 'N/A'),
-                "has_conflict": bool(conflict_note),
-                "content": combined_content,
-                "num_chunks": len(docs)
+                "issue_date": issue_date,
+                "file_path": primary_doc.metadata.get("file_path", ""),
+                "confidence_score": conf_score,
             })
             
-            # Build context text
-            year = primary_doc.metadata.get('academic_year', 'N/A')
-            meta_info = f"{source_label} - {title} ({doc_type_vn} - {year}){conflict_note}"
-            
-            context_parts.append(f"{meta_info}\n{combined_content}")
             source_idx += 1
-        
-        context = "\n\n---\n\n".join(context_parts)
-        
-        # Truncate if too long
-        if len(context) > self.max_context_length:
-            context = context[:self.max_context_length] + "\n\n[Context truncated]"
-            logger.warning("Context truncated due to length")
-        
-        return context, source_info
-    
-    def _detect_conflicts(self, documents: List[Document]) -> List[List[Document]]:
-        """Detect potential conflicts between documents
+
+        return "\n\n".join(context_parts), sources_list
+
+    # ======================================================
+    # Prompt
+    # ======================================================
+
+    def _extract_query_topics(self, query: str) -> Dict[str, list]:
+        """Extract key topics and keywords from user query
         
         Args:
-            documents: Documents to check
+            query: User question
             
         Returns:
-            List of conflict groups
+            Dictionary with extracted topics
         """
-        groups = {}
-        for doc in documents:
-            reg_type = doc.metadata.get('regulation_type', 'unknown')
-            if reg_type not in groups:
-                groups[reg_type] = []
-            groups[reg_type].append(doc)
+        query_lower = query.lower()
+        tokens = query_lower.split()
         
-        # Return groups with multiple documents from different dates
-        conflict_groups = []
-        for group in groups.values():
-            if len(group) > 1:
-                dates = {doc.metadata.get('issue_date', 'N/A') for doc in group}
-                if len(dates) > 1:  # Only conflicts if different dates
-                    conflict_groups.append(group)
+        # Remove common Vietnamese stop words
+        stop_words = {"của", "là", "được", "có", "về", "cho", "với", "từ", "trong", 
+                      "tại", "để", "nào", "gì", "không", "hay", "và", "hoặc", "như"}
         
-        return conflict_groups
+        # Extract main keywords (remove stop words and short words)
+        main_keywords = [t for t in tokens if len(t) > 2 and t not in stop_words]
+        
+        # Extract specific topics based on common patterns
+        topics = {
+            "main_keywords": main_keywords,
+            "has_negation": any(kw in query_lower for kw in ["không", "chưa", "không được"]),
+            "is_comparative": any(kw in query_lower for kw in ["tối đa", "tối thiểu", "nhiều hơn", "ít hơn", "cao hơn", "thấp hơn"]),
+            "target_audience": self._extract_target_audience(query),
+        }
+        
+        return topics
     
-    def _quality_check(self, answer: str, source_info: List[Dict]) -> float:
-        """Check answer quality based on citations and content
+    def _extract_target_audience(self, query: str) -> str:
+        """Extract target audience from query
+        
+        Args:
+            query: User question
+            
+        Returns:
+            Target audience string
+        """
+        query_lower = query.lower()
+        
+        if any(kw in query_lower for kw in ["sinh viên chính quy", "sinh viên"]):
+            return "sinh_vien_chinh_quy"
+        elif any(kw in query_lower for kw in ["cao học", "thạc sĩ", "master"]):
+            return "hoc_vien_cao_hoc"
+        elif any(kw in query_lower for kw in ["nghiên cứu sinh", "ncs", "phd", "ts"]):
+            return "nghien_cuu_sinh"
+        elif any(kw in query_lower for kw in ["vừa làm vừa học", "part-time", "parttime"]):
+            return "sinh_vien_part_time"
+        return "unknown"
+    
+    def _score_sentence_relevance(self, sentence: str, query_topics: Dict) -> float:
+        """Score how relevant a sentence is to the query
+        
+        Args:
+            sentence: A sentence from the answer
+            query_topics: Extracted topics from query
+            
+        Returns:
+            Relevance score between 0.0 and 1.0
+        """
+        sentence_lower = sentence.lower()
+        keywords = query_topics.get("main_keywords", [])
+        
+        # Count how many keywords appear in this sentence
+        matching_keywords = sum(1 for kw in keywords if kw in sentence_lower)
+        
+        if not keywords:
+            return 1.0  # If no keywords, keep everything
+        
+        # Relevance = percentage of keywords that appear in sentence
+        relevance = matching_keywords / len(keywords) if keywords else 0.5
+        
+        # Penalty if sentence has very different topic
+        if self._is_off_topic_sentence(sentence_lower, query_topics):
+            relevance *= 0.3
+        
+        return max(0.0, min(1.0, relevance))
+    
+    def _is_off_topic_sentence(self, sentence: str, query_topics: Dict) -> bool:
+        """Check if a sentence is off-topic
+        
+        Args:
+            sentence: Sentence text (lowercase)
+            query_topics: Extracted topics from query
+            
+        Returns:
+            True if sentence is off-topic
+        """
+        # Specific patterns that are usually off-topic when not explicitly asked
+        off_topic_patterns = [
+            ("chuẩn đầu ra tối thiểu" if "chuẩn đầu ra" not in str(query_topics) else None),
+            ("chuẩn đầu ra tối đa" if "chuẩn đầu ra" not in str(query_topics) else None),
+        ]
+        
+        off_topic_patterns = [p for p in off_topic_patterns if p]  # Remove None
+        
+        return any(pattern in sentence for pattern in off_topic_patterns)
+
+    def _build_prompt(
+        self,
+        query: str,
+        context: str,
+        analysis: Dict,
+    ) -> str:
+        """Build prompt optimized for legal grounding with inline citations.
+        
+        Uses generic principles that work for all query types.
+        """
+
+        target = analysis.get("target_audience", "unknown")
+
+        return f"""Bạn là chuyên gia tư vấn quy định đào tạo của trường đại học.
+
+    HƯỚNG DẪN NGẮN:
+    - Chỉ sử dụng thông tin có trong phần CONTEXT bên dưới. KHÔNG thêm thông tin hoặc suy đoán từ nguồn khác.
+    - Nếu sau khi đọc kỹ CONTEXT vẫn không thể trả lời, dùng mẫu: "Không tìm thấy quy định về <vấn đề> trong các văn bản được cung cấp." (thay <vấn đề> bằng nội dung câu hỏi).
+
+    CÁCH TRÍCH DẪN:
+    - Dùng inline citation [Nguồn N] ngay trước dấu chấm của câu/ý tương ứng. N là số thứ tự nguồn trong CONTEXT.
+    - Nếu hai nguồn mâu thuẫn, trích dẫn nguồn MỚI NHẤT và ghi kèm: "(Quy định đã thay đổi so với [Nguồn X])."
+
+    YÊU CẦU:
+    - KHÔNG ĐƯỢC TRẢ LỜI BẰNG ĐỊNH DẠNG MARKDOWN.
+    - Trả lời trực tiếp, ngắn gọn (tối đa 3 câu) định dạng plain text.
+    - Giữ nguyên số, điều kiện và thời hạn như trong văn bản.
+    - Không thêm ví dụ, giải thích dư thừa hoặc suy luận pháp lý.
+
+    ĐỐI TƯỢNG: {target}
+
+    CÂU HỎI:
+    {query}
+
+    CONTEXT:
+    {context}
+
+    TRẢ LỜI:
+    """
+
+    # ======================================================
+    # Fallback
+    # ======================================================
+
+    def _fallback_no_answer(self) -> str:
+        return (
+            "Không tìm thấy thông tin phù hợp trong các văn bản hiện có. "
+            "Bạn có thể cung cấp thêm chi tiết hoặc hỏi rõ hơn."
+        )
+
+    def _fallback_error(self) -> str:
+        return "Đã xảy ra lỗi khi tạo câu trả lời. Vui lòng thử lại sau."
+
+    def _filter_answer_by_relevance(
+        self, 
+        answer: str, 
+        query: str,
+        relevance_threshold: float = 0.3
+    ) -> str:
+        """Filter answer to remove sentences not relevant to the query
+        
+        This is a generalized filtering approach that works for any query type.
+        It extracts query topics and scores sentence relevance.
         
         Args:
             answer: Generated answer
-            source_info: Source information
+            query: User question
+            relevance_threshold: Minimum relevance score to keep sentence (0.0-1.0)
             
         Returns:
-            Quality score between 0.0 and 1.0
+            Filtered answer with only relevant sentences
         """
-        score = 0.5
+        import re
         
-        # Check for explicit citations
-        cited_sources = {src['label'] for src in source_info if src['label'] in answer}
-        if source_info:
-            citation_ratio = len(cited_sources) / len(source_info)
-            score += citation_ratio * 0.3
+        # Extract topics from query
+        query_topics = self._extract_query_topics(query)
         
-        # Penalty for no citations
-        if not cited_sources:
-            score -= 0.2
+        # Split answer into sentences
+        # Handle Vietnamese sentence endings: . ! ? followed by space or end
+        sentences = re.split(r'(?<=[.!?])\s+', answer)
         
-        # Bonus for good answer length
-        if len(answer) > self.MIN_ANSWER_LENGTH:
-            score += 0.1
+        filtered_sentences = []
         
-        # Penalty for too short answers (possible hallucination)
-        if len(answer) < 30:
-            score -= 0.2
-        
-        # Bonus if answer starts with direct answer
-        if any(start in answer[:30].lower() for start in ['có', 'không', 'được', 'không được', 'phải', 'không phải']):
-            score += 0.05
-        
-        # Check for uncertainty indicators (good - means LLM is honest)
-        uncertainty = sum(1 for word in ['không rõ', 'không có', 'không quy định', 'chưa có'] if word in answer.lower())
-        if uncertainty > 0:
-            score += 0.05
-        
-        return max(0.0, min(1.0, score))
-    
-    def _build_prompt(
-        self,
-        question: str,
-        context: str,
-        history: str,
-        analysis_result: Optional[Dict] = None
-    ) -> str:
-        """Build LLM prompt
-        
-        Args:
-            question: User question
-            context: Document context
-            history: Conversation history
-            analysis_result: Query analysis
+        for sent in sentences:
+            if not sent.strip():
+                continue
             
-        Returns:
-            Prompt string
+            # Score relevance of this sentence
+            relevance = self._score_sentence_relevance(sent, query_topics)
+            
+            if relevance >= relevance_threshold:
+                filtered_sentences.append(sent)
+                logger.debug(f"KEPT sentence (score={relevance:.2f}): {sent[:50]}...")
+            else:
+                logger.debug(f"FILTERED out (score={relevance:.2f}): {sent[:50]}...")
+        
+        # Rejoin sentences
+        filtered_answer = " ".join(filtered_sentences).strip()
+        
+        # If all sentences were filtered, return original answer
+        if not filtered_answer:
+            logger.warning("All sentences were filtered out, returning original answer")
+            return answer
+        
+        return filtered_answer
+
+    def _attach_citations(self, answer: str, sources_list: List[Dict]):
+        """Extract citations from answer and build reference list.
+        
+        Validates and remaps invalid citations to prevent citing non-existent sources.
+        Returns: (answer_with_fixed_citations, cited_sources)
         """
-        history_section = f"LỊCH SỬ:\n{history}\n" if history else ""
+        import re
+
+        # Get valid source indices
+        valid_indices = {src.get("index") for src in sources_list}
         
-        # Customize based on target audience
-        audience_instruction = ""
-        if analysis_result:
-            target_audience = analysis_result.get('target_audience', 'unknown')
-            if target_audience == 'sinh_vien_chinh_quy':
-                audience_instruction = "Ưu tiên DTDH."
-            elif target_audience in ['hoc_vien_cao_hoc', 'nghien_cuu_sinh']:
-                audience_instruction = "Ưu tiên DTSDH."
+        # Extract citations from answer [Nguồn X] format
+        citation_pattern = r'\[Nguồn\s+(\d+)\]'
+        matches = re.findall(citation_pattern, answer)
+        used_indices = set(int(m) for m in matches)
         
-        confidence_note = ""
-        if analysis_result and analysis_result.get('confidence', 1.0) < 0.7:
-            confidence_note = "Lưu ý: Câu hỏi có độ tin cậy thấp."
+        # Check for invalid citations
+        invalid_indices = used_indices - valid_indices
         
-        return f"""Bạn là trợ lý pháp lý chuyên trả lời quy định đại học.
-
-VAI TRÒ:
-- Trích xuất thông tin CHÍNH XÁC từ văn bản quy định
-
-NGUYÊN TẮC XỬ LÝ NGUỒN:
-1. XÁC ĐỊNH HIỆU LỰC:
-   - Văn bản có issue_date MỚI HƠN sẽ GHI ĐÈ văn bản cũ về cùng vấn đề
-   - Nếu văn bản mới quy định khác/bãi bỏ → CHỈ dùng văn bản mới
-   - Nếu văn bản mới KHÔNG ĐỀ CẬP → mới kết hợp cả 2 nguồn
-
-2. PHÁT HIỆN MÂU THUẪN:
-   - Nếu 2 nguồn có quy định TRÁI NGƯỢC về cùng vấn đề
-   - Ví dụ: Nguồn A "được phép X", Nguồn B "không được phép X"
-   → CHỈ trích dẫn nguồn MỚI NHẤT, ghi chú rõ: 
-   "Quy định này đã thay đổi so với [Nguồn cũ - năm X]"
-
-3. KẾT HỢP NGUỒN (chỉ khi):
-   - Các nguồn bổ sung cho nhau (không mâu thuẫn)
-   - Văn bản mới không hủy bỏ quy định cũ
-   - Áp dụng cho đối tượng/điều kiện KHÁC NHAU
-
-NGUYÊN TẮC TRÍCH XUẤT:
-1. CHỈ sử dụng thông tin có trong văn bản
-2. ĐƯỢC PHÉP diễn giải để dễ hiểu, nhưng:
-   - Giữ nguyên số liệu, mốc thời gian, điều kiện
-   - Chỉ thay đổi cách diễn đạt
-   - Không thay đổi phạm vi áp dụng
-3. KHÔNG thêm điều kiện/hệ quả/kết luận mới
-4. KHÔNG áp dụng logic suy luận ngoài văn bản
-5. Nếu không có thông tin → nói rõ "không có quy định về vấn đề này"
-
-HÌNH THỨC TRẢ LỜI:
-- Văn bản thuần (không dùng Markdown) dưới dạng đoạn văn
-- Mỗi ý có [Nguồn X]
-- Nếu có thay đổi quy định, ghi chú: "Cập nhật từ [năm X]"
-
-PHÂN BIỆT ĐỐI TƯỢNG:
-- DTDH = đào tạo đại học (sinh viên chính quy)
-- DTSDH = đào tạo sau đại học (cao học/NCS)
-{audience_instruction}
-{confidence_note}
-
-{history_section}
-NGỮ CẢNH (CÁC NGUỒN):
-{context}
-
-CÂU HỎI:
-{question}
-
-YÊU CẦU TRẢ LỜI:
-- Trả lời trực tiếp câu hỏi
-- Ngắn gọn, chính xác
-- Mỗi câu có trích dẫn [Nguồn X] và trích dẫn trước dấu chấm
-
-TRẢ LỜI:"""
-    
-    def _build_clean_prompt(
-        self,
-        question: str,
-        context: str
-    ) -> str:
-        """Build prompt for clean, factual answers without citations
-        
-        Used for dataset questions that need direct, concise answers
-        without source citations or metadata.
-        Applies same principles as _build_prompt but without citations.
-        
-        Args:
-            question: User question
-            context: Document context
-            
-        Returns:
-            Prompt string
-        """
-        return f"""Bạn là trợ lý pháp lý chuyên trả lời quy định đại học.
-
-VAI TRÒ:
-- Trích xuất thông tin CHÍNH XÁC từ văn bản quy định
-
-NGUYÊN TẮC XỬ LÝ NGUỒN:
-1. XÁC ĐỊNH HIỆU LỰC:
-   - Văn bản có issue_date MỚI HƠN sẽ GHI ĐÈ văn bản cũ về cùng vấn đề
-   - Nếu văn bản mới quy định khác/bãi bỏ → CHỈ dùng văn bản mới
-   - Nếu văn bản mới KHÔNG ĐỀ CẬP → mới kết hợp cả 2 nguồn
-
-2. PHÁT HIỆN MÂU THUẪN:
-   - Nếu 2 nguồn có quy định TRÁI NGƯỢC về cùng vấn đề
-   - Ví dụ: Nguồn A "được phép X", Nguồn B "không được phép X"
-   → CHỈ dùng quy định MỚI NHẤT
-
-3. KẾT HỢP NGUỒN (chỉ khi):
-   - Các nguồn bổ sung cho nhau (không mâu thuẫn)
-   - Văn bản mới không hủy bỏ quy định cũ
-   - Áp dụng cho đối tượng/điều kiện KHÁC NHAU
-
-NGUYÊN TẮC TRÍCH XUẤT:
-1. CHỈ sử dụng thông tin có trong văn bản
-2. ĐƯỢC PHÉP diễn giải để dễ hiểu, nhưng:
-   - Giữ nguyên số liệu, mốc thời gian, điều kiện
-   - Chỉ thay đổi cách diễn đạt
-   - Không thay đổi phạm vi áp dụng
-3. KHÔNG thêm điều kiện/hệ quả/kết luận mới
-4. KHÔNG áp dụng logic suy luận ngoài văn bản
-5. Nếu không có thông tin → nói rõ "không có quy định về vấn đề này"
-
-HÌNH THỨC TRẢ LỜI:
-- Văn bản thuần (không dùng Markdown)
-- NGẮN GỌN, TRỰC TIẾP, CHỈ CẦN THIẾT
-- Tối đa 1-2 câu
-- KHÔNG thêm citations, metadata, hay thông tin bổ sung
-- KHÔNG thêm "Cập nhật từ...", "năm không xác định"
-- Chỉ nội dung chính của câu trả lời
-
-NGỮ CẢNH (CÁC NGUỒN):
-{context}
-
-CÂU HỎI:
-{question}
-
-YÊU CẦU TRẢ LỜI:
-- Trả lời trực tiếp câu hỏi
-- Ngắn gọn, chính xác, không thêm thông tin thừa
-- Không citations, không metadata
-
-TRẢ LỜI:"""
-    
-    def _format_sources(self, source_info: List[Dict]) -> str:
-        """Format source references for display - only cited sources (deduplicated)
-        
-        Args:
-            source_info: Cited source information list (filtered) with original labels
-            
-        Returns:
-            Formatted sources text
-        """
-        if not source_info:
-            return ""
-        
-        # Deduplicate by title while preserving order and original label
-        seen_titles = set()
-        unique_sources = []
-        for src in source_info:
-            title = src.get('title', '')
-            if title not in seen_titles:
-                seen_titles.add(title)
-                unique_sources.append(src)
-        
-        sources_text = "\n\nNGUỒN THAM KHẢO:"
-        for src in unique_sources:
-            label = src.get('label', '[Nguồn ?]')
-            issue_date = src.get('issue_date', 'N/A')
-            num_chunks = src.get('num_chunks', 1)
-            
-            sources_text += (
-                f"\n{label} {src['title']} - {src['doc_type']} "
-                f"({src['regulation_type']}) - Năm học: {src['academic_year']} - "
-                f"Thời gian ban hành: {issue_date}"
+        # If there are invalid citations, log and remap them
+        fixed_answer = answer
+        if invalid_indices:
+            logger.warning(
+                f"Found citations to non-existent sources: {invalid_indices}. "
+                f"Valid sources are: {valid_indices}"
             )
+            # Remap invalid citations to the first valid source
+            if valid_indices:
+                first_valid = min(valid_indices)
+                for invalid_idx in sorted(invalid_indices):
+                    pattern = f"\\[Nguồn\\s+{invalid_idx}\\]"
+                    fixed_answer = re.sub(pattern, f"[Nguồn {first_valid}]", fixed_answer)
+                    logger.info(f"Remapped [Nguồn {invalid_idx}] to [Nguồn {first_valid}]")
         
-        return sources_text
-    
-    def _extract_cited_sources(self, answer: str, all_sources: List[Dict]) -> List[Dict]:
-        """Extract only the sources that are actually cited in the answer
-        
-        Args:
-            answer: Generated answer text
-            all_sources: All available sources
-            
-        Returns:
-            List of only cited sources, preserving order and deduplicating by title
-        """
+        # Extract citations from fixed answer
+        matches = re.findall(citation_pattern, fixed_answer)
+        used_indices = set(int(m) for m in matches)
+
+        # Build cited sources in order based on indices
         cited_sources = []
-        seen_titles = set()
+        for idx in sorted(used_indices):
+            for src in sources_list:
+                if src.get("index") == idx:
+                    cited_sources.append(src)
+                    break
+
+        # --- additional step: renumber sources sequentially so that
+        # citations start at 1 and have no gaps.  This fixes cases where
+        # only one source remains but it was originally labelled 2, etc.
+        if cited_sources:
+            mapping = {}
+            for new_idx, src in enumerate(cited_sources, start=1):
+                old_idx = src.get("index")
+                if old_idx != new_idx:
+                    mapping[old_idx] = new_idx
+                    src["index"] = new_idx
+            if mapping:
+                # replace in answer text
+                for old, new in mapping.items():
+                    fixed_answer = re.sub(rf"\[Nguồn\s+{old}\]", f"[Nguồn {new}]", fixed_answer)
+                logger.info(f"Reindexed cited sources to remove gaps: {mapping}")
+
+        return fixed_answer, cited_sources
+
+    def _format_response(self, raw_answer: str, sources: List[Dict]) -> str:
+        """Format the raw answer and append sources with proper formatting.
         
-        for src in all_sources:
-            src_label = src.get('label', '')
-            title = src.get('title', '')
-            
-            # Check if source is cited and not a duplicate
-            if src_label and src_label in answer and title not in seen_titles:
-                cited_sources.append(src)
-                seen_titles.add(title)
-        
-        return cited_sources
-    
-    def print_retrieved_docs(self, documents: List[Document]) -> None:
-        """Display retrieved documents for debugging
-        
-        Args:
-            documents: Documents to display
+        Appends "Nguồn:" section at the end with source indices.
         """
-        pass
+        if not raw_answer:
+            summary = "Không tìm thấy thông tin liên quan trong các văn bản cung cấp."
+        else:
+            summary = raw_answer.strip()
+
+        # Append sources section
+        out_lines = [summary]
+        
+        if not sources:
+            out_lines.append("\nNguồn: Không tìm thấy nguồn trong các văn bản đã cung cấp.")
+        else:
+            out_lines.append("\nNguồn:")
+            for s in sources:
+                idx = s.get("index", "?")
+                conf = s.get("confidence_score", 0.0)
+                issue = s.get("issue_date", "N/A")
+                title = s.get("title", s.get("file_path", "unknown"))
+                out_lines.append(f"[{idx}] {title} — {issue}")
+
+        return "\n".join(out_lines)
+

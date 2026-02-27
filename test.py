@@ -49,7 +49,10 @@ class EvalConfig:
     SLEEP_BETWEEN_BATCHES = 0.5
     RAG_RETRY_ATTEMPTS = 3
     EVAL_RETRY_ATTEMPTS = 2
-    RAG_SLEEP_DELAY = 0.5
+    # Delay inserted between generating individual answers to help ensure
+    # consistent model behavior and avoid rate-limit spikes.
+    # You can adjust this duration (in seconds) as needed.
+    ANSWER_DELAY = 3
     
     # API settings
     OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY')
@@ -184,14 +187,15 @@ class RAGQueryHandler:
             if not retrieved_docs:
                 return {"enhanced_query": search_query}, [], "Tôi không tìm thấy thông tin liên quan."
             
-            ranked_docs = self.rag.retriever.rank_by_recency(retrieved_docs)[:3]
+            # Use retriever's internal ranking (hybrid + cross-encoder + recency signal)
+            ranked_docs = retrieved_docs[:3]
             contexts = [doc.page_content for doc in ranked_docs]
             
             result = self.rag.response_generator.generate(
-                question=question,
+                query=question,
                 documents=ranked_docs,
                 conversation_history="",
-                analysis_result=intent,
+                analysis=intent,
                 clean_mode=True  # Dùng clean mode cho dataset
             )
             
@@ -241,7 +245,9 @@ class RAGAnswerGenerator:
                     })
                     
                     self.data_manager.save_rag_answers(rag_answers)
-                    time.sleep(EvalConfig.RAG_SLEEP_DELAY)
+                    # wait a bit before processing the next question to keep
+                    # answer timing consistent
+                    time.sleep(EvalConfig.ANSWER_DELAY)
                     
                 except Exception as e:
                     print(f"\nError processing question {qa['id']}: {type(e).__name__}: {e}")

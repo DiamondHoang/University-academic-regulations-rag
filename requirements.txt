@@ -1,0 +1,17 @@
+langchain
+langchain-core
+langchain-text-splitters
+langchain-chroma
+langchain-huggingface
+langchain-ollama
+chromadb
+huggingface-hub
+sentence-transformers
+pydantic
+numpy
+tqdm
+ragas
+azure-ai-documentintelligence
+rank_bm25
+fastapi
+uvicorn[standard]

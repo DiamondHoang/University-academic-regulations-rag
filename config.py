@@ -10,7 +10,7 @@ class Config:
     EMBEDDING_KWARGS = {"hnsw:space": "cosine"}
     
     # LLM Settings
-    LLM_MODEL = "gpt-oss:120b-cloud" # qwen3-coder:480b-cloud, gpt-oss:120b-cloud, deepseek-v3.1:671b-cloud
+    LLM_MODEL = "deepseek-v3.1:671b-cloud" # qwen3-coder:480b-cloud, gpt-oss:120b-cloud, deepseek-v3.1:671b-cloud, qwen2.5:3b
     LLM_TEMPERATURE = 0.1
     
     # Retrieval Settings
@@ -22,6 +22,7 @@ class Config:
     SIMILARITY_THRESHOLD = 0.5
     USE_CROSS_ENCODER_RERANK = True
     CROSS_ENCODER_MODEL = "BAAI/bge-reranker-v2-m3"  # Vietnamese-optimized reranker
+    RECENCY_WEIGHT = 0.2
     
     # Text Splitting Settings
     CHUNK_SIZE = 1000
@@ -53,11 +54,11 @@ class Config:
     PAGE_HEADER_PATTERN = r'^## Page \d+.*$\n?'
     PAGE_INFO_PATTERN = r'^#+\s.*(?:page|Page|PAGE).*$\n?'
     MARKDOWN_HEADER_PATTERN = r"^#+\s.*(?:page|Page|PAGE).*$\n?"
-    ACADEMIC_YEAR_PATTERN = r"học kỳ\s+(\d+)/(\d{4})-(\d{4})"
     DATE_PATTERNS = [
-        r"ngày\s+(\d{1,2})\s+tháng\s+(\d{1,2})\s+năm\s+(\d{4})",
-        r"(\d{1,2})/(\d{1,2})/(\d{4})",
+        r"(?:ngày\s*)?(\d{1,2})\s+(?:tháng|thang)\s*(\d{1,2}(?:\s*\d)?)\s+(?:năm|nam)\s+(\d{2,4})",
+        r"(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})",
     ]
+
     
     # Audience Mapping
     AUDIENCE_MAPPING = {
