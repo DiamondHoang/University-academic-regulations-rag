@@ -14,4 +14,9 @@ ragas
 azure-ai-documentintelligence
 rank_bm25
 fastapi
+python-dateutil
+pdf2image
 uvicorn[standard]
+beautifulsoup4 
+markdownify
+pandas

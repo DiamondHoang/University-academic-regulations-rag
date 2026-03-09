@@ -1,225 +1,111 @@
+import logging
 import json
 import re
-import logging
 from typing import Dict, List, Optional
-
 from langchain_ollama import ChatOllama
+from config import Config
 
 logger = logging.getLogger(__name__)
 
-
 class QueryAnalyzer:
-    """Analyze user queries for intent, follow-up, and metadata filtering"""
+    """Modular Query Analyzer for intention detection and query enhancement."""
 
     def __init__(self, llm: ChatOllama):
         self.llm = llm
 
-    # ======================
-    # METADATA EXTRACTION
-    # ======================
-    def extract_metadata(self, query: str) -> Dict[str, str]:
-        """Extract structured filters using lightweight rules"""
-        filters = {}
-        query_lower = query.lower()
-
-        # ---- Issue date ----
-        date_match = re.search(r'(\d{1,2})/(\d{1,2})/(\d{4})', query)
-        if date_match:
-            day, month, year = date_match.groups()
-            filters["issue_date"] = f"{year}-{month.zfill(2)}-{day.zfill(2)}"
-        else:
-            year_match = re.search(r'\b(20\d{2})\b', query)
-            if year_match:
-                year = year_match.group(1)
-                filters["issue_date_from"] = f"{year}-01-01"
-                filters["issue_date_to"] = f"{year}-12-31"
-
-        # ---- Target audience hint ----
-        filters["target_hint"] = self._detect_audience(query_lower)
-
-        return filters
-
-    def _detect_audience(self, query_lower: str) -> str:
-        """Rule-based audience detection"""
-        if any(kw in query_lower for kw in ["sinh viên", "đại học", "chính quy", "đh"]):
-            return "sinh_vien_chinh_quy"
-        if any(kw in query_lower for kw in ["cao học", "thạc sĩ", "master"]):
-            return "hoc_vien_cao_hoc"
-        if any(kw in query_lower for kw in ["nghiên cứu sinh", "ncs", "phd"]):
-            return "nghien_cuu_sinh"
-        return "unknown"
-
-    # ======================
-    # MAIN ANALYSIS
-    # ======================
-    def analyze(
-        self,
-        question: str,
-        conversation_history: Optional[List[Dict]] = None
-    ) -> Dict:
-
-        if not conversation_history:
-            conversation_history = []
-
-        metadata_filters = self.extract_metadata(question)
-
-        # ---- Fast path: no history ----
-        if not conversation_history:
-            return {
-                "is_followup": False,
-                "target_audience": metadata_filters.get("target_hint", "unknown"),
-                "enhanced_query": question,
-                "reasoning": "No history",
-                "confidence": 1.0,
-                "filters": metadata_filters,
-            }
-
-        # ---- LLM reasoning ----
-        prompt = self._build_analysis_prompt(question, conversation_history)
-
+    def analyze(self, query: str, history: str = "") -> Dict:
+        """Analyze user query to determine intent, filters, and enhanced version."""
+        
+        # Try metadata-based extraction first
+        dates = self._extract_dates(query)
+        audience = self._detect_audience(query)
+        
+        prompt = self._build_prompt(query, history)
+        
         try:
             response = self.llm.invoke(prompt)
-            raw = getattr(response, "content", "") or ""
-            content = self._clean_json_response(raw)
-
-            if not content:
-                raise ValueError("Empty response content from LLM")
-
-            # attempt to parse JSON; be forgiving if the model returns junk
-            try:
-                result = json.loads(content)
-            except json.JSONDecodeError:
-                try:
-                    extracted = self._extract_json_from_text(content)
-                    result = json.loads(extracted)
-                except Exception as inner_e:
-                    # log once and fall back to a safe default object
-                    logger.warning(
-                        "Failed to parse JSON from analysis response, using fallback.\n"
-                        "raw: %s\ncleaned: %s\nerror: %s",
-                        raw[:200], content[:200], inner_e
-                    )
-                    result = {
-                        "is_followup": False,
-                        "target_audience": "unknown",
-                        "enhanced_query": question,
-                        "reasoning": "model returned invalid JSON",
-                        "confidence": 0.0,
-                    }
-            # deterministic confidence calibration (only if not already set)
-            if "confidence" not in result:
-                result["confidence"] = self._estimate_confidence(result)
-
+            result = self._parse_json_response(response.content)
+            
+            # Merge with heuristic extractions if LLM missed them
+            if not result.get("issue_dates") and dates:
+                result["issue_dates"] = dates
+            if result.get("target_audience") == "unknown" and audience:
+                result["target_audience"] = audience
+                
+            return result
         except Exception as e:
-            logger.error(
-                "Query analysis failed: %s; response preview: %s",
-                e,
-                (raw[:500] + "...") if 'raw' in locals() and raw else "<no response>",
-                exc_info=True,
-            )
-            result = {
-                "is_followup": False,
+            logger.error(f"Query analysis failed: {e}")
+            return self._get_fallback_analysis(query, audience, dates)
+
+    def _build_prompt(self, query: str, history: str) -> str:
+        return f"""Bạn là chuyên gia phân tích yêu cầu cho hệ thống RAG về quy chế học vụ.
+Hãy phân tích câu hỏi sau:
+Câu hỏi: {query}
+Lịch sử hội thoại: {history}
+
+Hướng dẫn:
+- "target_audience": sinh_vien_chinh_quy, hoc_vien_cao_hoc, nghien_cuu_sinh.
+- "filters": {{ "doc_type": "DTDH" hoặc "DTSDH", "regulation_type": "QDHV" hoặc null }}.
+- "enhanced_query": Viết lại câu hỏi đầy đủ, rõ ràng bằng tiếng Việt phổ thông, giải thích các từ viết tắt (SV, TC, HK, HK232 -> Học kỳ 2 năm học 2023-2024, v.v.) để tối ưu tìm kiếm.
+
+Trả về JSON duy nhất với các trường:
+1. "intent": Loại ý định (tra_cuu_quy_dinh, giai_thich_quy_trinh, khac).
+2. "target_audience": Đối tượng liên quan.
+3. "enhanced_query": Câu hỏi đã mở rộng.
+4. "filters": Bộ lọc metadata chính xác.
+5. "confidence": Độ tin cậy của phân tích (0.0 - 1.0).
+
+Chỉ trả về JSON.
+JSON:"""
+
+    def _parse_json_response(self, text: str) -> Dict:
+        """Robust JSON parsing for LLM output."""
+        try:
+            # Try to find JSON block
+            match = re.search(r"\{.*\}", text, re.DOTALL)
+            if match:
+                return json.loads(match.group())
+            return json.loads(text)
+        except Exception:
+            # Manual regex fallback if JSON is malformed
+            return {
+                "intent": "tra_cuu_quy_dinh",
                 "target_audience": "unknown",
-                "enhanced_query": question,
-                "reasoning": str(e),
-                "confidence": 0.0,
+                "enhanced_query": text[:100],
+                "filters": {},
+                "confidence": 0.5
             }
 
-        result["filters"] = metadata_filters
-        return result
+    def _extract_dates(self, text: str) -> List[str]:
+        """Extract dates from text using predefined patterns."""
+        found_dates = []
+        for pattern in Config.DATE_PATTERNS:
+            matches = re.findall(pattern, text)
+            for m in matches:
+                # Format to YYYY-MM-DD
+                if len(m) == 3:
+                    d, m, y = m
+                    if len(y) == 2: y = "20" + y
+                    found_dates.append(f"{y}-{m.zfill(2)}-{d.zfill(2)}")
+        return found_dates
 
-    # ======================
-    # PROMPT
-    # ======================
-    def _build_analysis_prompt(
-        self,
-        question: str,
-        conversation_history: List[Dict],
-    ) -> str:
+    def _detect_audience(self, text: str) -> Optional[str]:
+        """Heuristic-based audience detection."""
+        text = text.lower()
+        if any(w in text for w in ["sinh viên", "sv", "chính quy"]):
+            return "sinh_vien_chinh_quy"
+        if any(w in text for w in ["cao học", "thạc sĩ", "học viên"]):
+            return "hoc_vien_cao_hoc"
+        if any(w in text for w in ["nghiên cứu sinh", "ncs", "tiến sĩ"]):
+            return "nghien_cuu_sinh"
+        return None
 
-        history = conversation_history[-3:]
-
-        history_text = "\n".join(
-            f"Q{i+1}: {turn['question']}\nA{i+1}: {turn['answer'][:150]}..."
-            for i, turn in enumerate(history)
-        )
-
-        return f"""Bạn là chuyên gia phân tích câu hỏi về quy định đại học Việt Nam.
-
-Hướng dẫn cho LLM:
-- LUÔN TRẢ VỀ DUY NHẤT 1 ĐỐI TƯỢNG JSON hợp lệ, KHÔNG thêm lời giải thích.
-- KHÔNG giải toán, KHÔNG tạo ví dụ, chỉ phân tích văn bản câu hỏi.
-- Nếu không thể phân tích, trả về JSON mặc định với giá trị phù hợp.
-
-Phân tích cần thực hiện:
-1. Là câu hỏi tiếp nối hay mới
-2. Đối tượng (sinh viên/chuyên ngành ...)
-3. Viết lại câu hỏi nếu cần (enhanced_query)
-
-LỊCH SỬ:
-{history_text}
-
-CÂU HỎI: {question}
-
-Trả về JSON (như mẫu):
-{{
-  "is_followup": true/false,
-  "target_audience": "...",
-  "enhanced_query": "...",
-  "reasoning": "...",
-  "confidence": 0.0-1.0
-}}
-"""
-
-    # ======================
-    # CONFIDENCE
-    # ======================
-    def _estimate_confidence(self, result: Dict) -> float:
-        """Calibrate LLM confidence using heuristic signals"""
-
-        base = result.get("confidence", 0.5)
-
-        # Strong reasoning signal
-        if len(result.get("reasoning", "")) > 40:
-            base += 0.1
-
-        # Target clarity
-        if result.get("target_audience") != "unknown":
-            base += 0.1
-        else:
-            base -= 0.1
-
-        # Query enrichment
-        if result.get("enhanced_query") != "":
-            base += 0.05
-
-        return max(0.0, min(1.0, base))
-
-    # ======================
-    # UTILS
-    # ======================
-    def _clean_json_response(self, content: str) -> str:
-        content = content.strip()
-        if "```" in content:
-            content = content.split("```")[1].split("```")[0].strip()
-        return content
-
-    def _extract_json_from_text(self, text: str) -> str:
-        """Attempt to extract a JSON object or array substring from arbitrary text.
-
-        Looks for the first/fullest {...} or [...] span and returns it. Raises
-        ValueError if no plausible JSON span is found.
-        """
-        # Try object
-        obj_start = text.find("{")
-        obj_end = text.rfind("}")
-        if obj_start != -1 and obj_end != -1 and obj_end > obj_start:
-            return text[obj_start:obj_end + 1]
-
-        # Try array
-        arr_start = text.find("[")
-        arr_end = text.rfind("]")
-        if arr_start != -1 and arr_end != -1 and arr_end > arr_start:
-            return text[arr_start:arr_end + 1]
-
-        raise ValueError("No JSON object or array found in LLM response")
+    def _get_fallback_analysis(self, query: str, audience: str, dates: List[str]) -> Dict:
+        return {
+            "intent": "tra_cuu_quy_dinh",
+            "target_audience": audience or "unknown",
+            "enhanced_query": query,
+            "filters": {},
+            "issue_dates": dates,
+            "confidence": 0.3
+        }

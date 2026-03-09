@@ -1,64 +1,3 @@
-# from fastapi import FastAPI
-# from pydantic import BaseModel
-# from fastapi.responses import HTMLResponse
-# from uni_rag import UniversityRAG
-# from loader.doc_loader import RegulationDocumentLoader
-# from config import Config
-
-# app = FastAPI()
-
-# # Load system khi start server
-# loader = RegulationDocumentLoader(base_path=Config.BASE_PATH)
-# rag = UniversityRAG(config={"use_hybrid": True})
-
-# documents = loader.load_documents()
-# rag.build_vectorstore(documents, force_rebuild=False)
-
-
-# class QueryRequest(BaseModel):
-#     question: str
-
-
-# @app.post("/query")
-# def query_rag(request: QueryRequest):
-#     answer = rag.query(request.question)
-#     return {"answer": answer}
-
-
-# @app.get("/", response_class=HTMLResponse)
-# def home():
-#     return """
-#     <html>
-#         <head>
-#             <title>University Chatbot</title>
-#         </head>
-#         <body>
-#             <h2>Chatbot Quy Định</h2>
-#             <input type="text" id="question" size="60"/>
-#             <button onclick="send()">Gửi</button>
-#             <pre id="response"></pre>
-
-#             <script>
-#                 async function send() {
-#                     const question = document.getElementById("question").value;
-#                     const response = await fetch("/query", {
-#                         method: "POST",
-#                         headers: {
-#                             "Content-Type": "application/json"
-#                         },
-#                         body: JSON.stringify({ question })
-#                     });
-#                     const data = await response.json();
-#                     document.getElementById("response").innerText = data.answer;
-#                 }
-#             </script>
-#         </body>
-#     </html>
-#     """
-
-
-
-
 import uuid
 import asyncio
 import traceback
@@ -100,7 +39,7 @@ def _build_shared_rag():
     global _shared_rag, _rag_error
     try:
         loader = RegulationDocumentLoader(base_path=Config.BASE_PATH)
-        rag = UniversityRAG(config={"use_hybrid": True})
+        rag = UniversityRAG()
         documents = loader.load_documents()
         rag.build_vectorstore(documents, force_rebuild=False)
         _shared_rag = rag
@@ -113,7 +52,7 @@ def _build_shared_rag():
 def _make_session_rag() -> UniversityRAG:
     """New RAG instance sharing the already-built vectorstore/retriever."""
     base = _shared_rag
-    session_rag = UniversityRAG(config={"use_hybrid": True})
+    session_rag = UniversityRAG()
     session_rag.vectorstore = base.vectorstore
     session_rag.retriever  = base.retriever
     session_rag.all_chunks = base.all_chunks

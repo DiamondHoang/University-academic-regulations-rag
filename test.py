@@ -175,7 +175,7 @@ class RAGQueryHandler:
                 self.rag.memory.get_history()
             )
             
-            search_query = intent["enhanced_query"]
+            search_query = intent.get("enhanced_query", question)
             
             retrieved_docs = self.rag.retriever.retrieve(
                 search_query,

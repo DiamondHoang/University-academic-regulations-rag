@@ -123,7 +123,6 @@ class ConversationMemory:
         """Persist history to JSON file with JSON-friendly serialization."""
         def _json_default(o):
             # convert Document->dict; datetime->iso string; fallback to str
-            from langchain_core.documents import Document
             if isinstance(o, Document):
                 return {"page_content": o.page_content, "metadata": o.metadata}
             if isinstance(o, datetime):

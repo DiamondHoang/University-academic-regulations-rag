@@ -1,7 +1,8 @@
 import os
 import logging
+import uuid
 from typing import List, Optional, Dict
-
+import re
 from langchain_text_splitters import RecursiveCharacterTextSplitter, MarkdownHeaderTextSplitter
 from langchain_chroma import Chroma
 from langchain_huggingface import HuggingFaceEmbeddings
@@ -72,7 +73,7 @@ class UniversityRAG:
                 embedding_function=self.embeddings
             )
         
-        self.retriever = HybridRetriever(self.vectorstore, self.config["use_hybrid"])
+        self.retriever = HybridRetriever(self.vectorstore)
         self.retriever.build_bm25(chunks)
     
     def _split_documents(self, documents: List[Document]) -> List[Document]:
@@ -94,19 +95,29 @@ class UniversityRAG:
         ]
         
         # Process documents with text splitting
-        all_chunks: List[Document] = []
-        
-        for doc in cleaned_documents:
-            # Split by markdown headers first
-            header_chunks = self._split_by_markdown_headers(doc)
-            
-            # Then apply regular text splitting
-            for chunk in header_chunks:
-                if len(chunk.page_content) <= self.config["chunk_size"]:
-                    all_chunks.append(chunk)
-                else:
-                    sub_chunks = self._regular_text_split(chunk)
-                    all_chunks.extend(sub_chunks)
+        if not self.config.get("use_parent_child", Config.USE_PARENT_CHILD):
+            text_splitter = RecursiveCharacterTextSplitter(
+                chunk_size=self.config.get("chunk_size", Config.CHUNK_SIZE),
+                chunk_overlap=self.config.get("chunk_overlap", Config.CHUNK_OVERLAP),
+                separators=Config.SEPARATORS,
+                length_function=len,
+            )
+            all_chunks = text_splitter.split_documents(cleaned_documents)
+        else:
+            # Legacy Parent-Child logic
+            all_chunks: List[Document] = []
+            for doc in cleaned_documents:
+                header_chunks = self._split_by_markdown_headers(doc)
+                for chunk in header_chunks:
+                    parent_chunks = self._parent_text_split(chunk)
+                    for p_chunk in parent_chunks:
+                        parent_id = str(uuid.uuid4())
+                        parent_content = p_chunk.page_content
+                        child_chunks = self._child_text_split(p_chunk)
+                        for c_chunk in child_chunks:
+                            c_chunk.metadata["parent_id"] = parent_id
+                            c_chunk.metadata["parent_content"] = parent_content
+                            all_chunks.append(c_chunk)
         
         # Add chunk IDs
         for i, chunk in enumerate(all_chunks):
@@ -143,18 +154,21 @@ class UniversityRAG:
             return [doc]
     
     
-    def _regular_text_split(self, doc: Document) -> List[Document]:
-        """Split text using recursive character splitter with table-aware separators
-        
-        Args:
-            doc: Document to split
-            
-        Returns:
-            List of document chunks
-        """
+    def _parent_text_split(self, doc: Document) -> List[Document]:
+        """Split text using recursive character splitter to create Parent chunks"""
         text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=self.config["chunk_size"],
-            chunk_overlap=self.config["chunk_overlap"],
+            chunk_size=self.config["parent_chunk_size"],
+            chunk_overlap=self.config["parent_chunk_overlap"],
+            separators=Config.SEPARATORS,
+            length_function=len,
+        )
+        return text_splitter.split_documents([doc])
+
+    def _child_text_split(self, doc: Document) -> List[Document]:
+        """Split parent text using recursive character splitter to create Child chunks"""
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=self.config["child_chunk_size"],
+            chunk_overlap=self.config["child_chunk_overlap"],
             separators=Config.SEPARATORS,
             length_function=len,
         )
@@ -167,64 +181,81 @@ class UniversityRAG:
         regulation_type: Optional[str] = None,
         k: int = 5
     ) -> str:
-        """Process a query and return answer
-        
-        Args:
-            question: User question
-            doc_type: Optional document type filter
-            regulation_type: Optional regulation type filter
-            k: Number of results to retrieve
-            
-        Returns:
-            Answer string with sources
-        """
+        """Process a query and return answer with caching and robust fallbacks."""
         try:
             if not self.vectorstore:
                 return "Vector store chưa được khởi tạo."
             
+            # Preprocess question: expand abbreviations
+            processed_question = self._preprocess_query(question)
+            
             conversation_history = self.memory.get_history()
-            intent = self.query_analyzer.analyze(question, conversation_history)
+            
+            # 1. Query Analysis with Fallback
+            try:
+                intent = self.query_analyzer.analyze(processed_question, conversation_history)
+            except Exception as e:
+                logger.warning(f"Query analysis failed, using fallback: {e}")
+                intent = {
+                    "enhanced_query": processed_question, 
+                    "target_audience": "sinh viên", 
+                    "confidence": 0.5,
+                    "intent_type": "information_retrieval"
+                }
             
             confidence = intent.get("confidence", 1.0)
             clarification = ""
             if confidence < self.config["confidence_threshold"]:
                 clarification = " (Lưu ý: Phân tích câu hỏi có độ tin cậy thấp)"
             
-            search_query = intent["enhanced_query"]
+            search_query = intent.get("enhanced_query", question)
             
+            # 2. Metadata Detection
             if not doc_type:
-                doc_type = self._auto_detect_doc_type(intent["target_audience"])
+                doc_type = self._auto_detect_doc_type(intent.get("target_audience", "sinh viên"))
             
             filters = intent.get("filters", {})
             doc_type = filters.get("doc_type") or doc_type
             regulation_type = filters.get("regulation_type") or regulation_type
             
-            retrieved_docs = self.retriever.retrieve(
-                search_query,
-                k=self.config["max_retrieved_docs"],
-                doc_type=doc_type,
-                regulation_type=regulation_type,
-            )
+            # 3. Hybrid Retrieval
+            try:
+                retrieved_docs = self.retriever.retrieve(
+                    search_query,
+                    k=self.config["max_retrieved_docs"],
+                    doc_type=doc_type,
+                    regulation_type=regulation_type,
+                )
+            except Exception as e:
+                logger.error(f"Retrieval failed: {e}")
+                return "Xin lỗi, tôi gặp sự cố khi tìm kiếm thông tin văn bản."
             
             if not retrieved_docs:
-                answer = "Tôi không tìm thấy thông tin liên quan."
+                answer = "Tôi không tìm thấy thông tin liên quan trong các quy định hiện có."
                 self.memory.add_turn(question, answer)
                 return answer
             
-            ranked_docs = retrieved_docs[:3]
+            # 4. Response Generation with Fallback
+            max_docs = self.config.get("max_response_docs", Config.MAX_RESPONSE_DOCS)
+            ranked_docs = retrieved_docs[:max_docs]
             conv_history = self.memory.get_context_string(include_last_n=2)
-            gen_result = self.response_generator.generate(
-                query=question,
-                documents=ranked_docs,
-                conversation_history=conv_history,
-                analysis=intent,
-                clean_mode=False,
-            )
-
-            # ResponseGenerator returns a dict with 'answer', 'confidence', 'sources'
-            answer = gen_result.get("answer", "") + clarification
-            confidence = gen_result.get("confidence", 0.0)
             
+            try:
+                gen_result = self.response_generator.generate(
+                    query=question,
+                    documents=ranked_docs,
+                    conversation_history=conv_history,
+                    analysis=intent,
+                    clean_mode=False,
+                )
+                answer = gen_result.get("answer", "") + clarification
+            except Exception as e:
+                logger.error(f"Generation failed: {e}")
+                # Fallback: Just return titles of found documents if generation fails
+                found_titles = list(set([d.metadata.get("title", "Không rõ tiêu đề") for d in ranked_docs]))
+                answer = f"Tôi đã tìm thấy thông tin trong các văn bản sau nhưng gặp lỗi khi tóm tắt: {', '.join(found_titles)}. Vui lòng thử lại sau."
+            
+            # Update memory and cache
             turn_data = {
                 "question": question,
                 "answer": answer,
@@ -236,11 +267,27 @@ class UniversityRAG:
             return answer
             
         except Exception as e:
-            logger.error(f"Query failed: {e}", exc_info=True)
-            error_answer = f"Xin lỗi, có lỗi xảy ra: {str(e)}"
-            self.memory.add_turn(question, error_answer)
+            logger.error(f"Global Query failed: {e}", exc_info=True)
+            error_answer = f"Xin lỗi, có lỗi hệ thống xảy ra: {str(e)}"
             return error_answer
     
+    def _preprocess_query(self, query: str) -> str:
+        """Preprocess user query to expand common university abbreviations.
+        
+        Args:
+            query: User's original query
+            
+        Returns:
+            Preprocessed query with expanded terms
+        """
+        processed = query
+        # Use word boundaries to avoid partial matching
+        for abbr, expansion in Config.ABBREVIATIONS.items():
+            pattern = rf"\b{abbr}\b"
+            processed = re.sub(pattern, expansion, processed, flags=re.IGNORECASE)
+        
+        return processed
+
     def _clean_page_headers(self, content: str) -> str:
         """Remove page headers from markdown content
         
@@ -250,21 +297,46 @@ class UniversityRAG:
         Returns:
             Cleaned content
         """
-        import re
         cleaned_content = re.sub(Config.PAGE_HEADER_PATTERN, '', content, flags=re.MULTILINE)
         cleaned_content = re.sub(Config.PAGE_INFO_PATTERN, '', cleaned_content, flags=re.MULTILINE)
         return cleaned_content
     
-    def _auto_detect_doc_type(self, target_audience: str) -> Optional[str]:
-        """Auto-detect doc_type from target audience
-        
+    def _auto_detect_doc_type(self, target_audience) -> Optional[str]:
+        """Auto-detect doc_type from target audience.
+
+        The LLM may return target_audience as a list instead of a plain string,
+        so we normalise it first.  We also map common Vietnamese audience phrases
+        to the canonical keys used in AUDIENCE_MAPPING.
+
         Args:
-            target_audience: Target audience identifier
-            
+            target_audience: Target audience identifier (str or list).
+
         Returns:
-            Document type or None
+            Document type or None.
         """
-        return Config.AUDIENCE_MAPPING.get(target_audience)
+        # Unwrap list → take the first element
+        if isinstance(target_audience, list):
+            target_audience = target_audience[0] if target_audience else ""
+
+        # Normalise to str just in case
+        if not isinstance(target_audience, str):
+            target_audience = str(target_audience)
+
+        # Map common plain-language values to AUDIENCE_MAPPING keys
+        _NORMALISE = {
+            "sinh viên": "sinh_vien_chinh_quy",
+            "sinh_vien": "sinh_vien_chinh_quy",
+            "undergraduate": "sinh_vien_chinh_quy",
+            "học viên cao học": "hoc_vien_cao_hoc",
+            "cao học": "hoc_vien_cao_hoc",
+            "master": "hoc_vien_cao_hoc",
+            "nghiên cứu sinh": "nghien_cuu_sinh",
+            "tiến sĩ": "nghien_cuu_sinh",
+            "phd": "nghien_cuu_sinh",
+        }
+        normalised = _NORMALISE.get(target_audience.strip().lower(), target_audience)
+
+        return Config.AUDIENCE_MAPPING.get(normalised)
     
     def chat_loop(self) -> None:
         """Interactive chat loop for user interaction"""
@@ -331,7 +403,7 @@ class UniversityRAG:
 def main() -> None:
     """Main entry point for the application"""
     loader = RegulationDocumentLoader(base_path=Config.BASE_PATH)
-    rag = UniversityRAG(config={"use_hybrid": True})
+    rag = UniversityRAG()
     documents = loader.load_documents()
     rag.build_vectorstore(documents, force_rebuild=False)
     rag.chat_loop()

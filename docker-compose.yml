@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  rag-bot:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+      - hf_cache:/root/.cache/huggingface
+    environment:
+      - DB_PATH=vector_db
+      - LLM_MODEL=deepseek-v3.1:671b-cloud
+      - EMBEDDING_MODEL=BAAI/bge-m3
+      - CROSS_ENCODER_MODEL=BAAI/bge-reranker-v2-m3
+    restart: always
+
+volumes:
+  hf_cache:
