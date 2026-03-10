@@ -36,7 +36,8 @@ class UniversityRAG:
         self.llm = ChatOllama(
             model=self.config["llm_model"],
             temperature=Config.LLM_TEMPERATURE,
-            timeout=120.0  # Tăng timeout cho Ollama
+            base_url=self.config.get("ollama_base_url", Config.OLLAMA_BASE_URL),
+            timeout=120.0
         )
         self.vectorstore: Optional[Chroma] = None
         
@@ -72,7 +73,6 @@ class UniversityRAG:
             )
         
         self.retriever = HybridRetriever(self.vectorstore)
-        self.retriever.build_bm25(chunks)
     
     def _split_documents(self, documents: List[Document]) -> List[Document]:
         """Split documents into chunks
@@ -92,30 +92,14 @@ class UniversityRAG:
             for doc in documents
         ]
         
-        # Process documents with text splitting
-        if not self.config.get("use_parent_child", Config.USE_PARENT_CHILD):
-            text_splitter = RecursiveCharacterTextSplitter(
-                chunk_size=self.config.get("chunk_size", Config.CHUNK_SIZE),
-                chunk_overlap=self.config.get("chunk_overlap", Config.CHUNK_OVERLAP),
-                separators=Config.SEPARATORS,
-                length_function=len,
-            )
-            all_chunks = text_splitter.split_documents(cleaned_documents)
-        else:
-            # Legacy Parent-Child logic
-            all_chunks: List[Document] = []
-            for doc in cleaned_documents:
-                header_chunks = self._split_by_markdown_headers(doc)
-                for chunk in header_chunks:
-                    parent_chunks = self._parent_text_split(chunk)
-                    for p_chunk in parent_chunks:
-                        parent_id = str(uuid.uuid4())
-                        parent_content = p_chunk.page_content
-                        child_chunks = self._child_text_split(p_chunk)
-                        for c_chunk in child_chunks:
-                            c_chunk.metadata["parent_id"] = parent_id
-                            c_chunk.metadata["parent_content"] = parent_content
-                            all_chunks.append(c_chunk)
+        # Process documents with standard text splitting
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=Config.CHUNK_SIZE,
+            chunk_overlap=Config.CHUNK_OVERLAP,
+            separators=Config.SEPARATORS,
+            length_function=len,
+        )
+        all_chunks = text_splitter.split_documents(cleaned_documents)
         
         # Add chunk IDs
         for i, chunk in enumerate(all_chunks):
@@ -123,54 +107,6 @@ class UniversityRAG:
         
         return all_chunks
     
-    def _split_by_markdown_headers(self, doc: Document) -> List[Document]:
-        """Split document by markdown headers
-        
-        Args:
-            doc: Document to split
-            
-        Returns:
-            List of document chunks
-        """
-        markdown_splitter = MarkdownHeaderTextSplitter(
-            headers_to_split_on=Config.get_markdown_headers(),
-            strip_headers=False
-        )
-        
-        try:
-            splits = markdown_splitter.split_text(doc.page_content)
-            header_chunks = []
-            for split in splits:
-                new_metadata = doc.metadata.copy()
-                new_metadata.update(split.metadata)
-                header_chunks.append(Document(
-                    page_content=split.page_content,
-                    metadata=new_metadata
-                ))
-            return header_chunks
-        except Exception:
-            return [doc]
-    
-    
-    def _parent_text_split(self, doc: Document) -> List[Document]:
-        """Split text using recursive character splitter to create Parent chunks"""
-        text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=self.config["parent_chunk_size"],
-            chunk_overlap=self.config["parent_chunk_overlap"],
-            separators=Config.SEPARATORS,
-            length_function=len,
-        )
-        return text_splitter.split_documents([doc])
-
-    def _child_text_split(self, doc: Document) -> List[Document]:
-        """Split parent text using recursive character splitter to create Child chunks"""
-        text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=self.config["child_chunk_size"],
-            chunk_overlap=self.config["child_chunk_overlap"],
-            separators=Config.SEPARATORS,
-            length_function=len,
-        )
-        return text_splitter.split_documents([doc])
     
     def query(
         self,
@@ -197,7 +133,7 @@ class UniversityRAG:
                 audience = self._detect_audience_heuristics(question)
                 doc_type = self._auto_detect_doc_type(audience)
             
-            # 2. Hybrid Retrieval
+            # 2. Vector Retrieval (Simplified)
             try:
                 retrieved_docs = self.retriever.retrieve(
                     search_query,
@@ -217,6 +153,17 @@ class UniversityRAG:
             # 4. Response Generation with Fallback
             max_docs = self.config.get("max_response_docs", Config.MAX_RESPONSE_DOCS)
             ranked_docs = retrieved_docs[:max_docs]
+            
+            # Print retrieved documents for visibility
+            # print(f"\n[Thông tin tìm thấy: {len(ranked_docs)} tài liệu]")
+            # for i, doc in enumerate(ranked_docs, 1):
+            #     title = doc.metadata.get("title", "Không rõ tiêu đề")
+            #     date = doc.metadata.get("issue_date", "Không rõ ngày")
+            #     score = doc.metadata.get("confidence_score", 0.0)
+            #     print(f"  {i}. {title} (Ban hành: {date}) - Score: {score}")
+            #     print(f"     Nội dung: {doc.page_content[:300]}...") # In 300 ký tự đầu để tránh quá dài
+            #     print("-" * 30)
+            
             conv_history = self.memory.get_context_string(include_last_n=2)
             
             try:
@@ -278,6 +225,17 @@ class UniversityRAG:
         cleaned_content = re.sub(Config.PAGE_HEADER_PATTERN, '', content, flags=re.MULTILINE)
         cleaned_content = re.sub(Config.PAGE_INFO_PATTERN, '', cleaned_content, flags=re.MULTILINE)
         return cleaned_content
+    
+    def _detect_audience_heuristics(self, text: str) -> str:
+        """Heuristic-based audience detection moved from QueryAnalyzer."""
+        text = text.lower()
+        if any(w in text for w in ["sinh viên", "sv", "chính quy", "đại học"]):
+            return "sinh_vien_chinh_quy"
+        if any(w in text for w in ["cao học", "thạc sĩ", "học viên"]):
+            return "hoc_vien_cao_hoc"
+        if any(w in text for w in ["nghiên cứu sinh", "ncs", "tiến sĩ"]):
+            return "nghien_cuu_sinh"
+        return "sinh_vien_chinh_quy" # Default to undergraduate
     
     def _detect_audience_heuristics(self, text: str) -> str:
         """Heuristic-based audience detection moved from QueryAnalyzer."""

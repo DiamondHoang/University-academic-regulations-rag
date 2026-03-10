@@ -12,7 +12,6 @@ numpy
 tqdm
 ragas
 azure-ai-documentintelligence
-rank_bm25
 fastapi
 python-dateutil
 pdf2image

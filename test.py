@@ -34,13 +34,14 @@ class EvalConfig:
     """Centralized configuration for RAG evaluation"""
     DATASET_PATH = "dataset.json"
     OUTPUT_DIR = "rag_eval_results"
-    TOP_K = 5
-    NUM_QUESTIONS = 50  # Set to None for all questions, or specify a number (e.g., 50)
+    TOP_K = 7  # Synced with Config.MAX_RESPONSE_DOCS
+    NUM_QUESTIONS = 2  # Set to None for all questions
     
     # File paths
     CHECKPOINT_FILE = f"{OUTPUT_DIR}/checkpoint.json"
     RAG_RESULTS_FILE = f"{OUTPUT_DIR}/rag_answers.json"
     FULL_RESULTS_FILE = f"{OUTPUT_DIR}/full_results.csv"
+    EVAL_CHECKPOINT_FILE = f"{OUTPUT_DIR}/eval_checkpoint.json"
     SUMMARY_FILE = f"{OUTPUT_DIR}/summary.csv"
     
     # Batching and retry settings
@@ -170,16 +171,15 @@ class RAGQueryHandler:
     def query(self, question):
         """Execute RAG query with automatic retry on rate limit"""
         try:
-            intent = self.rag.query_analyzer.analyze(
-                question,
-                self.rag.memory.get_history()
-            )
-            
-            search_query = intent.get("enhanced_query", question)
+            # Local expansion of abbreviations to match uni_rag logic
+            search_query = question
+            for abbr, expansion in Config.ABBREVIATIONS.items():
+                pattern = rf"\b{abbr}\b"
+                search_query = re.sub(pattern, expansion, search_query, flags=re.IGNORECASE)
             
             retrieved_docs = self.rag.retriever.retrieve(
                 search_query,
-                k=self.rag.config["max_retrieved_docs"],
+                k=EvalConfig.TOP_K,
                 doc_type=None,
                 regulation_type=None,
             )
@@ -187,23 +187,30 @@ class RAGQueryHandler:
             if not retrieved_docs:
                 return {"enhanced_query": search_query}, [], "Tôi không tìm thấy thông tin liên quan."
             
-            # Use retriever's internal ranking (hybrid + cross-encoder + recency signal)
-            ranked_docs = retrieved_docs[:3]
+            # Use top K documents as configured
+            ranked_docs = retrieved_docs[:EvalConfig.TOP_K]
             contexts = [doc.page_content for doc in ranked_docs]
             
             result = self.rag.response_generator.generate(
                 query=question,
                 documents=ranked_docs,
                 conversation_history="",
-                analysis=intent,
-                clean_mode=True  # Dùng clean mode cho dataset
+                clean_mode=True
             )
             
-            # Answer đã được clean trong response_generator._generate_clean
-            return intent, contexts, result["answer"]
+            # Local citation stripping and cleaning for test dataset
+            answer = result["answer"]
+            # Remove [1], [2], etc.
+            answer = re.sub(r'\[\d+\]', '', answer).strip()
+            # Remove extra spaces before punctuation
+            answer = re.sub(r'\s+([.,!?;])', r'\1', answer)
+            # Remove redundant spaces
+            answer = re.sub(r'\s\s+', ' ', answer)
+            
+            return {"enhanced_query": search_query}, contexts, answer, result.get("sources", [])
         except Exception as e:
             print(f"Query processing error: {type(e).__name__}: {e}")
-            return {"enhanced_query": question}, [], f"Lỗi xử lý: {str(e)[:50]}"
+            return {"enhanced_query": question}, [], f"Lỗi xử lý: {str(e)[:50]}", []
 
 
 # =========================
@@ -230,7 +237,7 @@ class RAGAnswerGenerator:
                     continue
                 
                 try:
-                    intent, contexts, answer = self.query_handler.query(qa["question"])
+                    intent, contexts, answer, sources = self.query_handler.query(qa["question"])
                     
                     if answer is None or not isinstance(contexts, list):
                         print(f"\nWarning: Invalid response for {qa['id']}, skipping...")
@@ -242,6 +249,7 @@ class RAGAnswerGenerator:
                         "answer": str(answer),
                         "ground_truth": qa["answer"],
                         "contexts": contexts,
+                        "nguồn": sources,
                     })
                     
                     self.data_manager.save_rag_answers(rag_answers)
@@ -314,14 +322,39 @@ class MetricsEvaluator:
         total_samples = len(dataset)
         num_batches = (total_samples + batch_size - 1) // batch_size
         
+        # Load evaluation checkpoint if exists
+        checkpoint_data = {}
+        if os.path.exists(EvalConfig.EVAL_CHECKPOINT_FILE):
+            with open(EvalConfig.EVAL_CHECKPOINT_FILE, "r") as f:
+                checkpoint_data = json.load(f)
+            print(f"Loaded evaluation checkpoint with {len(checkpoint_data)} processed items")
+
         for i in range(0, total_samples, batch_size):
             batch_end = min(i + batch_size, total_samples)
-            batch = dataset.select(range(i, batch_end))
+            batch_indices = range(i, batch_end)
             
+            # Check if all items in this batch are already in checkpoint
+            batch_ids = [dataset[idx]["id"] for idx in batch_indices]
+            if all(bid in checkpoint_data for bid in batch_ids):
+                print(f"Skipping batch {i//batch_size + 1}/{num_batches} (all items cached)")
+                batch_df = pd.DataFrame([checkpoint_data[bid] for bid in batch_ids])
+                all_results.append(batch_df)
+                continue
+
+            batch_data = dataset.select(batch_indices)
             print(f"\nEvaluating batch {i//batch_size + 1}/{num_batches} ({batch_end - i} samples)")
             
-            batch_results = self.evaluate_batch(batch)
-            all_results.append(batch_results)
+            batch_results_df = self.evaluate_batch(batch_data)
+            
+            # Update checkpoint
+            for idx, row in batch_results_df.iterrows():
+                sample_id = batch_ids[idx]
+                checkpoint_data[sample_id] = row.to_dict()
+            
+            with open(EvalConfig.EVAL_CHECKPOINT_FILE, "w") as f:
+                json.dump(checkpoint_data, f)
+                
+            all_results.append(batch_results_df)
             
             if batch_end < total_samples:
                 time.sleep(EvalConfig.SLEEP_BETWEEN_BATCHES)
@@ -378,13 +411,18 @@ class EvaluationOrchestrator:
         dataset = self.data_manager.load_dataset(limit=EvalConfig.NUM_QUESTIONS)
         print(f"Dataset size: {len(dataset)} questions")
         
-        # Step 2: Generate RAG answers
+        # Step 2: Generate RAG answers COMPLETELY first
         print(f"\n[2/4] Generating/Loading RAG answers")
         eval_dataset = self._get_or_generate_answers(dataset)
         print(f"Total samples ready for evaluation: {len(eval_dataset)}")
         
-        # Step 3: Run evaluation
-        print(f"\n[3/4] Running RAGAS evaluation")
+        # Reload dataset from RAG_RESULTS_FILE to ensure we evaluate the exact persistent state
+        print(f"Reloading generated answers for evaluation...")
+        rag_data = self.data_manager.load_rag_answers()
+        eval_dataset = Dataset.from_list(rag_data)
+        
+        # Step 3: Run evaluation phase ONLY after generation is finished
+        print(f"\n[3/4] Running RAGAS evaluation phase")
         df = self._get_or_evaluate(eval_dataset)
         
         # Step 4: Generate summary

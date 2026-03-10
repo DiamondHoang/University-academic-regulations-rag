@@ -12,7 +12,9 @@ services:
       - DB_PATH=vector_db
       - LLM_MODEL=deepseek-v3.1:671b-cloud
       - EMBEDDING_MODEL=BAAI/bge-m3
-      - CROSS_ENCODER_MODEL=BAAI/bge-reranker-v2-m3
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     restart: always
 
 volumes:

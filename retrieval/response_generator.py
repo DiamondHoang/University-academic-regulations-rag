@@ -62,7 +62,7 @@ class ResponseGenerator:
         final_response = self._format_response(answer, sources)
         
         if clean_mode:
-            return {"answer": answer, "confidence": 1.0, "sources": []}
+            return {"answer": answer, "confidence": 1.0, "sources": sources}
             
         return {
             "answer": final_response,
@@ -181,33 +181,34 @@ class ResponseGenerator:
         return "\n\n---\n\n".join(all_context_strings), sources_metadata
 
     def _build_messages(self, query: str, context: str, primary_source_index: int = 1) -> List[Dict]:
-        """Build structured messages for ChatOllama.
-        
-        The primary_source_index tells the LLM which source has been pre-selected as
-        the most recent/authoritative — so it doesn't need to resolve conflicts itself.
-        """
+        """Build structured messages for ChatOllama with recency awareness."""
         
         system_prompt = textwrap.dedent(f"""
-            Bạn là một trợ lý AI tư vấn quy chế học vụ.
-            NHIỆM VỤ: Trả lời câu hỏi ngắn gọn, trực tiếp dựa trên CONTEXT.
+            Bạn là một trợ lý AI tư vấn quy chế học vụ của nhà trường.
+            NHIỆM VỤ: Trả lời câu hỏi ngắn gọn, trực tiếp và chính xác dựa trên CONTEXT được cung cấp.
 
-            QUY TẮC NGHIÊM NGẶT:
-            1. CHỈ DÙNG NGUỒN SỐ {primary_source_index}: Đây là nguồn DUY NHẤT bạn được dùng. Bỏ QUA hoàn toàn mọi nguồn khác. Không được kết hợp hay đề cập đến bất kỳ nguồn nào khác dù nó có trong CONTEXT.
-            2. KIỂM TRA TRƯỚC: Nếu Nguồn {primary_source_index} không chứa thông tin trực tiếp trả lời câu hỏi, PHẢI nói: "Tôi không tìm thấy thông tin cụ thể về vấn đề này trong các văn bản quy định hiện có." Không suy luận hay bịa đặt.
-            3. TRÍCH NGUỒN BẮT BUỘC: Cuối mỗi câu thêm [{primary_source_index}]. Ví dụ: "Sinh viên đăng ký tối thiểu 12 tín chỉ [{primary_source_index}]." Chỉ viết "[{primary_source_index}]", tuyệt đối không viết "[Nguồn N]".
-            4. PLAIN TEXT: Không dùng **, *, #. Chỉ văn xuôi thuần túy.
-            5. TRỰC TIẾP: Trả lời ngay trọng tâm, không giải thích "tại sao chọn nguồn này".
+            QUY TẮC ƯU TIÊN THỜI GIAN:
+            - CONTEXT có thể chứa nhiều văn bản (Nguồn 1, Nguồn 2, ...).
+            - Nếu các nguồn có thông tin mâu thuẫn hoặc khác nhau về cùng một vấn đề, bạn PHẢI ưu tiên thông tin từ nguồn có **Ngày ban hành** gần đây nhất (mới nhất).
+            - Luôn coi văn bản mới hơn là văn bản cập nhật hoặc thay thế cho văn bản cũ.
+
+            QUY TẮC TRẢ LỜI:
+            1. TRÍCH NGUỒN BẮT BUỘC: Cuối mỗi câu/ý phải ghi số thứ tự nguồn [N]. Ví dụ: "Sinh viên đăng ký tối thiểu 12 tín chỉ [1]."
+            2. PLAIN TEXT: Không dùng format markdown như **, *, #. Chỉ dùng văn xuôi thuần túy.
+            3. TRUNG THỰC: Nếu không tìm thấy thông tin trong CONTEXT, hãy nói: "Tôi không tìm thấy thông tin cụ thể về vấn đề này trong các văn bản quy định hiện có."
+            4. NGẮN GỌN: Đi thẳng vào vấn đề, không giải thích dài dòng về cách bạn chọn nguồn.
+            5. TỔNG HỢP: TUYỆT ĐỐI KHÔNG ĐƯỢC TRẢ LỜI TỔNG HỢP TỪ NHIỀU NGUỒN, CHỈ ĐƯỢC TRẢ LỜI DỰA TRÊN 1 NGUỒN DUY NHẤT VÀ ĐÚNG NHẤT.
         """).strip()
 
         human_prompt = textwrap.dedent(f"""
-            CONTEXT (chỉ dùng Nguồn {primary_source_index}, bỏ qua mọi nguồn khác):
+            CONTEXT:
             ---
             {context}
             ---
 
             CÂU HỎI: {query}
 
-            Trả lời dựa trên nội dung Nguồn {primary_source_index}. Nếu Nguồn {primary_source_index} không có thông tin, nói "Tôi không tìm thấy thông tin cụ thể về vấn đề này trong các văn bản quy định hiện có.":
+            Dựa trên CONTEXT (ưu tiên nguồn mới nhất nếu có mâu thuẫn), hãy trả lời câu hỏi trên:
         """).strip()
 
         return [
