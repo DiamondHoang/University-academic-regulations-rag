@@ -11,7 +11,6 @@ from langchain_core.documents import Document
 
 from config import Config
 from memory.conversation_memory import ConversationMemory
-from retrieval.query_analyzer import QueryAnalyzer
 from retrieval.hybrid_retriever import HybridRetriever
 from retrieval.response_generator import ResponseGenerator
 from loader.doc_loader import RegulationDocumentLoader
@@ -42,7 +41,6 @@ class UniversityRAG:
         self.vectorstore: Optional[Chroma] = None
         
         # Initialize modular components
-        self.query_analyzer = QueryAnalyzer(self.llm)
         self.retriever: Optional[HybridRetriever] = None
         self.response_generator = ResponseGenerator(self.llm)
         self.memory = ConversationMemory(
@@ -191,34 +189,15 @@ class UniversityRAG:
             
             conversation_history = self.memory.get_history()
             
-            # 1. Query Analysis with Fallback
-            try:
-                intent = self.query_analyzer.analyze(processed_question, conversation_history)
-            except Exception as e:
-                logger.warning(f"Query analysis failed, using fallback: {e}")
-                intent = {
-                    "enhanced_query": processed_question, 
-                    "target_audience": "sinh viên", 
-                    "confidence": 0.5,
-                    "intent_type": "information_retrieval"
-                }
+            # 1. Expand query and detect filters via heuristics
+            search_query = self._preprocess_query(question)
             
-            confidence = intent.get("confidence", 1.0)
-            clarification = ""
-            if confidence < self.config["confidence_threshold"]:
-                clarification = " (Lưu ý: Phân tích câu hỏi có độ tin cậy thấp)"
-            
-            search_query = intent.get("enhanced_query", question)
-            
-            # 2. Metadata Detection
+            # Simple heuristic audience detection if doc_type not provided
             if not doc_type:
-                doc_type = self._auto_detect_doc_type(intent.get("target_audience", "sinh viên"))
+                audience = self._detect_audience_heuristics(question)
+                doc_type = self._auto_detect_doc_type(audience)
             
-            filters = intent.get("filters", {})
-            doc_type = filters.get("doc_type") or doc_type
-            regulation_type = filters.get("regulation_type") or regulation_type
-            
-            # 3. Hybrid Retrieval
+            # 2. Hybrid Retrieval
             try:
                 retrieved_docs = self.retriever.retrieve(
                     search_query,
@@ -245,10 +224,10 @@ class UniversityRAG:
                     query=question,
                     documents=ranked_docs,
                     conversation_history=conv_history,
-                    analysis=intent,
+                    analysis={}, # No longer using query analysis
                     clean_mode=False,
                 )
-                answer = gen_result.get("answer", "") + clarification
+                answer = gen_result.get("answer", "")
             except Exception as e:
                 logger.error(f"Generation failed: {e}")
                 # Fallback: Just return titles of found documents if generation fails
@@ -260,7 +239,6 @@ class UniversityRAG:
                 "question": question,
                 "answer": answer,
                 "documents": ranked_docs,
-                "analysis": intent,
             }
             self.memory.add_turn_with_data(turn_data)
             
@@ -300,6 +278,17 @@ class UniversityRAG:
         cleaned_content = re.sub(Config.PAGE_HEADER_PATTERN, '', content, flags=re.MULTILINE)
         cleaned_content = re.sub(Config.PAGE_INFO_PATTERN, '', cleaned_content, flags=re.MULTILINE)
         return cleaned_content
+    
+    def _detect_audience_heuristics(self, text: str) -> str:
+        """Heuristic-based audience detection moved from QueryAnalyzer."""
+        text = text.lower()
+        if any(w in text for w in ["sinh viên", "sv", "chính quy", "đại học"]):
+            return "sinh_vien_chinh_quy"
+        if any(w in text for w in ["cao học", "thạc sĩ", "học viên"]):
+            return "hoc_vien_cao_hoc"
+        if any(w in text for w in ["nghiên cứu sinh", "ncs", "tiến sĩ"]):
+            return "nghien_cuu_sinh"
+        return "sinh_vien_chinh_quy" # Default to undergraduate
     
     def _auto_detect_doc_type(self, target_audience) -> Optional[str]:
         """Auto-detect doc_type from target audience.

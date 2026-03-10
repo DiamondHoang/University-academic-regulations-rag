@@ -122,11 +122,17 @@ class HybridRetriever:
 
         vector_kwargs = {"k": candidate_k}
         if chroma_filter:
-            if len(chroma_filter) == 1:
-                key, val = list(chroma_filter.items())[0]
-                vector_kwargs["filter"] = {key: val}
+            conditions = []
+            for k_filt, v_filt in chroma_filter.items():
+                if isinstance(v_filt, list):
+                    conditions.append({k_filt: {"$in": v_filt}})
+                else:
+                    conditions.append({k_filt: v_filt})
+            
+            if len(conditions) == 1:
+                vector_kwargs["filter"] = conditions[0]
             else:
-                vector_kwargs["filter"] = {"$and": [{k: v} for k, v in chroma_filter.items()]}
+                vector_kwargs["filter"] = {"$and": conditions}
 
         # Use relevance scores so CONFIDENCE_THRESHOLD can actually filter weak hits
         try:
@@ -170,11 +176,17 @@ class HybridRetriever:
         # Vector search with metadata filtering
         vector_kwargs: Dict[str, Any] = {"k": candidate_k}
         if chroma_filter:
-            if len(chroma_filter) == 1:
-                key, val = list(chroma_filter.items())[0]
-                vector_kwargs["filter"] = {key: val["$eq"]}
+            conditions = []
+            for k_filt, v_filt in chroma_filter.items():
+                if isinstance(v_filt, list):
+                    conditions.append({k_filt: {"$in": v_filt}})
+                else:
+                    conditions.append({k_filt: v_filt})
+            
+            if len(conditions) == 1:
+                vector_kwargs["filter"] = conditions[0]
             else:
-                vector_kwargs["filter"] = {"$and": [{k: v["$eq"]} for k, v in chroma_filter.items()]}
+                vector_kwargs["filter"] = {"$and": conditions}
         
         vector_docs = self.vectorstore.similarity_search(query, **vector_kwargs)
 

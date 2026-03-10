@@ -1,0 +1,117 @@
+[
+  {
+    "question": "Số tín chỉ tối thiểu sinh viên chính quy phải đăng ký trong một học kỳ là bao nhiêu?",
+    "answer": "Số tín chỉ tối thiểu của sinh viên chính quy trong một học kỳ chính là 14 tín chỉ [1].\n\nNguồn tham khảo:\n[1] Quy định về học vụ và đào tạo - Phiên bản hợp nhất (Ban hành: 2022-07-28)",
+    "context_docs": [
+      {
+        "page_content": "Số tín chỉ thiết kế trung bình cho một học kỳ chính của hình thức chính quy là 17 tín chỉ và\ncủa hình thức vừa làm vừa học là 14.\n\nSố tín chỉ tối thiểu của sinh viên trong một học kỳ chính như sau:\n\n\\- Sinh viên chính quy: 14 tín chỉ.\n\nTrường hợp đặc biệt (học lực yếu, hoặc vì lý do sức khoẻ), sinh viên được phép học\ntối thiểu 11 tín chỉ và áp dụng tối đa trong 02 học kỳ.\n\n\\- Sinh viên vừa làm vừa học, đào tạo từ xa: 11 tín chỉ.\n\nTrường hợp đặc biệt (học lực yếu, hoặc vì lý do sức khoẻ, hoặc vì lý do công việc),\nsinh viên được phép học tối thiểu 09 tín chỉ và áp dụng tối đa trong 03 học kỳ.\n\nSố tín chỉ tối đa của sinh viên được phép học trong một học kỳ chính như sau:\n\n\\- Sinh viên chính quy: 21 tín chỉ.\n\nTrường hợp có học lực đạt từ loại giỏi và được sự đồng ý của Khoa quản lý, sinh viên\nđược phép học tối đa 25 tín chỉ.\n\n\\- Sinh viên vừa làm vừa học, đào tạo từ xa: 17 tín chỉ.\n\n<!-- PageFooter=\"Jule\" -->\n\n\n---\n\n\n<!-- PageNumber=\"12\" -->",
+        "metadata": {
+          "chunk_id": 112,
+          "content_type": "markdown",
+          "doc_type": "DTDH",
+          "issue_date": "2022-07-28",
+          "title": "Quy định về học vụ và đào tạo - Phiên bản hợp nhất",
+          "regulation_type": "QDHV",
+          "priority": "normal",
+          "file_path": "md\\DTDH\\QDHV\\Quy định về học vụ và đào tạo - Phiên bản hợp nhất.md",
+          "confidence_score": 0.7719
+        }
+      }
+    ],
+    "analysis": null,
+    "confidence": null,
+    "timestamp": "2026-03-10T08:20:43.520279"
+  },
+  {
+    "question": "Số tín chỉ tối đa sinh viên chính quy được phép đăng ký trong một học kỳ chính là bao nhiêu?",
+    "answer": "Dựa trên nội dung Nguồn 1, số tín chỉ tối đa sinh viên chính quy được phép đăng ký trong một học kỳ chính là **21 tín chỉ**.\n\nTrường hợp đặc biệt, nếu sinh viên có học lực đạt từ loại giỏi và được sự đồng ý của Khoa quản lý, sinh viên được phép học tối đa **25 tín chỉ**.",
+    "context_docs": [
+      {
+        "page_content": "Số tín chỉ thiết kế trung bình cho một học kỳ chính của hình thức chính quy là 17 tín chỉ và\ncủa hình thức vừa làm vừa học là 14.\n\nSố tín chỉ tối thiểu của sinh viên trong một học kỳ chính như sau:\n\n\\- Sinh viên chính quy: 14 tín chỉ.\n\nTrường hợp đặc biệt (học lực yếu, hoặc vì lý do sức khoẻ), sinh viên được phép học\ntối thiểu 11 tín chỉ và áp dụng tối đa trong 02 học kỳ.\n\n\\- Sinh viên vừa làm vừa học, đào tạo từ xa: 11 tín chỉ.\n\nTrường hợp đặc biệt (học lực yếu, hoặc vì lý do sức khoẻ, hoặc vì lý do công việc),\nsinh viên được phép học tối thiểu 09 tín chỉ và áp dụng tối đa trong 03 học kỳ.\n\nSố tín chỉ tối đa của sinh viên được phép học trong một học kỳ chính như sau:\n\n\\- Sinh viên chính quy: 21 tín chỉ.\n\nTrường hợp có học lực đạt từ loại giỏi và được sự đồng ý của Khoa quản lý, sinh viên\nđược phép học tối đa 25 tín chỉ.\n\n\\- Sinh viên vừa làm vừa học, đào tạo từ xa: 17 tín chỉ.\n\n<!-- PageFooter=\"Jule\" -->\n\n\n---\n\n\n<!-- PageNumber=\"12\" -->",
+        "metadata": {
+          "issue_date": "2022-07-28",
+          "priority": "normal",
+          "content_type": "markdown",
+          "file_path": "md\\DTDH\\QDHV\\Quy định về học vụ và đào tạo - Phiên bản hợp nhất.md",
+          "doc_type": "DTDH",
+          "chunk_id": 112,
+          "regulation_type": "QDHV",
+          "title": "Quy định về học vụ và đào tạo - Phiên bản hợp nhất",
+          "confidence_score": 0.7757
+        }
+      }
+    ],
+    "analysis": null,
+    "confidence": null,
+    "timestamp": "2026-03-10T08:21:11.208652"
+  },
+  {
+    "question": "Số tín chỉ tối đa sinh viên chính quy được phép đăng ký trong một học kỳ chính là bao nhiêu?",
+    "answer": "Số tín chỉ tối đa của sinh viên chính quy trong một học kỳ chính là 21 tín chỉ [1].\n\nNguồn tham khảo:\n[1] Quy định về học vụ và đào tạo - Phiên bản hợp nhất (Ban hành: 2022-07-28)",
+    "context_docs": [
+      {
+        "page_content": "Số tín chỉ thiết kế trung bình cho một học kỳ chính của hình thức chính quy là 17 tín chỉ và\ncủa hình thức vừa làm vừa học là 14.\n\nSố tín chỉ tối thiểu của sinh viên trong một học kỳ chính như sau:\n\n\\- Sinh viên chính quy: 14 tín chỉ.\n\nTrường hợp đặc biệt (học lực yếu, hoặc vì lý do sức khoẻ), sinh viên được phép học\ntối thiểu 11 tín chỉ và áp dụng tối đa trong 02 học kỳ.\n\n\\- Sinh viên vừa làm vừa học, đào tạo từ xa: 11 tín chỉ.\n\nTrường hợp đặc biệt (học lực yếu, hoặc vì lý do sức khoẻ, hoặc vì lý do công việc),\nsinh viên được phép học tối thiểu 09 tín chỉ và áp dụng tối đa trong 03 học kỳ.\n\nSố tín chỉ tối đa của sinh viên được phép học trong một học kỳ chính như sau:\n\n\\- Sinh viên chính quy: 21 tín chỉ.\n\nTrường hợp có học lực đạt từ loại giỏi và được sự đồng ý của Khoa quản lý, sinh viên\nđược phép học tối đa 25 tín chỉ.\n\n\\- Sinh viên vừa làm vừa học, đào tạo từ xa: 17 tín chỉ.\n\n<!-- PageFooter=\"Jule\" -->\n\n\n---\n\n\n<!-- PageNumber=\"12\" -->",
+        "metadata": {
+          "priority": "normal",
+          "title": "Quy định về học vụ và đào tạo - Phiên bản hợp nhất",
+          "chunk_id": 112,
+          "doc_type": "DTDH",
+          "file_path": "md\\DTDH\\QDHV\\Quy định về học vụ và đào tạo - Phiên bản hợp nhất.md",
+          "issue_date": "2022-07-28",
+          "content_type": "markdown",
+          "regulation_type": "QDHV",
+          "confidence_score": 0.7757
+        }
+      }
+    ],
+    "analysis": null,
+    "confidence": null,
+    "timestamp": "2026-03-10T08:21:19.886675"
+  },
+  {
+    "question": "Số tín chỉ tối thiểu sinh viên chính quy phải đăng ký trong một học kỳ là bao nhiêu?",
+    "answer": "Số tín chỉ tối thiểu của sinh viên chính quy trong một học kỳ chính là 14 tín chỉ [1].\n\nNguồn tham khảo:\n[1] Quy định về học vụ và đào tạo - Phiên bản hợp nhất (Ban hành: 2022-07-28)",
+    "context_docs": [
+      {
+        "page_content": "Số tín chỉ thiết kế trung bình cho một học kỳ chính của hình thức chính quy là 17 tín chỉ và\ncủa hình thức vừa làm vừa học là 14.\n\nSố tín chỉ tối thiểu của sinh viên trong một học kỳ chính như sau:\n\n\\- Sinh viên chính quy: 14 tín chỉ.\n\nTrường hợp đặc biệt (học lực yếu, hoặc vì lý do sức khoẻ), sinh viên được phép học\ntối thiểu 11 tín chỉ và áp dụng tối đa trong 02 học kỳ.\n\n\\- Sinh viên vừa làm vừa học, đào tạo từ xa: 11 tín chỉ.\n\nTrường hợp đặc biệt (học lực yếu, hoặc vì lý do sức khoẻ, hoặc vì lý do công việc),\nsinh viên được phép học tối thiểu 09 tín chỉ và áp dụng tối đa trong 03 học kỳ.\n\nSố tín chỉ tối đa của sinh viên được phép học trong một học kỳ chính như sau:\n\n\\- Sinh viên chính quy: 21 tín chỉ.\n\nTrường hợp có học lực đạt từ loại giỏi và được sự đồng ý của Khoa quản lý, sinh viên\nđược phép học tối đa 25 tín chỉ.\n\n\\- Sinh viên vừa làm vừa học, đào tạo từ xa: 17 tín chỉ.\n\n<!-- PageFooter=\"Jule\" -->\n\n\n---\n\n\n<!-- PageNumber=\"12\" -->",
+        "metadata": {
+          "issue_date": "2022-07-28",
+          "content_type": "markdown",
+          "chunk_id": 112,
+          "regulation_type": "QDHV",
+          "title": "Quy định về học vụ và đào tạo - Phiên bản hợp nhất",
+          "doc_type": "DTDH",
+          "file_path": "md\\DTDH\\QDHV\\Quy định về học vụ và đào tạo - Phiên bản hợp nhất.md",
+          "priority": "normal",
+          "confidence_score": 0.7719
+        }
+      }
+    ],
+    "analysis": null,
+    "confidence": null,
+    "timestamp": "2026-03-10T08:21:47.417928"
+  },
+  {
+    "question": "Số tín chỉ tối thiểu sinh viên chính quy phải đăng ký trong một học kỳ là bao nhiêu?",
+    "answer": "Chào bạn! Dựa trên quy định về học vụ và đào tạo bạn đã cung cấp, tôi không tìm thấy thông tin cụ thể về số tín chỉ tối thiểu sinh viên chính quy phải đăng ký trong một học kỳ.\n\nQuy định bạn đưa ra chỉ đề cập đến số tín chỉ tối thiểu sinh viên được phép học trong một học kỳ chính (14 tín chỉ) và các trường hợp đặc biệt (11 tín chỉ). Để biết chính xác số tín chỉ tối thiểu bắt buộc phải đăng ký, bạn nên tham khảo trực tiếp quy chế đào tạo chính thức của trường hoặc liên hệ với Phòng Đào tạo của trường bạn.",
+    "context_docs": [
+      {
+        "page_content": "Số tín chỉ thiết kế trung bình cho một học kỳ chính của hình thức chính quy là 17 tín chỉ và\ncủa hình thức vừa làm vừa học là 14.\n\nSố tín chỉ tối thiểu của sinh viên trong một học kỳ chính như sau:\n\n\\- Sinh viên chính quy: 14 tín chỉ.\n\nTrường hợp đặc biệt (học lực yếu, hoặc vì lý do sức khoẻ), sinh viên được phép học\ntối thiểu 11 tín chỉ và áp dụng tối đa trong 02 học kỳ.\n\n\\- Sinh viên vừa làm vừa học, đào tạo từ xa: 11 tín chỉ.\n\nTrường hợp đặc biệt (học lực yếu, hoặc vì lý do sức khoẻ, hoặc vì lý do công việc),\nsinh viên được phép học tối thiểu 09 tín chỉ và áp dụng tối đa trong 03 học kỳ.\n\nSố tín chỉ tối đa của sinh viên được phép học trong một học kỳ chính như sau:\n\n\\- Sinh viên chính quy: 21 tín chỉ.\n\nTrường hợp có học lực đạt từ loại giỏi và được sự đồng ý của Khoa quản lý, sinh viên\nđược phép học tối đa 25 tín chỉ.\n\n\\- Sinh viên vừa làm vừa học, đào tạo từ xa: 17 tín chỉ.\n\n<!-- PageFooter=\"Jule\" -->\n\n\n---\n\n\n<!-- PageNumber=\"12\" -->",
+        "metadata": {
+          "content_type": "markdown",
+          "doc_type": "DTDH",
+          "file_path": "md\\DTDH\\QDHV\\Quy định về học vụ và đào tạo - Phiên bản hợp nhất.md",
+          "title": "Quy định về học vụ và đào tạo - Phiên bản hợp nhất",
+          "regulation_type": "QDHV",
+          "issue_date": "2022-07-28",
+          "chunk_id": 112,
+          "priority": "normal",
+          "confidence_score": 0.7719
+        }
+      }
+    ],
+    "analysis": null,
+    "confidence": null,
+    "timestamp": "2026-03-10T08:22:03.781665"
+  }
+]
