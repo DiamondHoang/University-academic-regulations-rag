@@ -34,7 +34,7 @@ jobs:
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v2
         with:
-          app-name: 'uni-rag-app' # Replace with your Azure App Service name
+          app-name: 'regulationchatbot' # Replace with your Azure App Service name
           images: '${{ secrets.REGISTRY_LOGIN_SERVER }}/uni-rag:latest'
 
       - name: Logout from Azure
