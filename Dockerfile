@@ -22,11 +22,10 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PATH="/root/.local/bin:$PATH"
 
-# Install Ollama binary
+# Install Ollama binary (Direct binary download is more reliable)
 RUN apt-get update && apt-get install -y curl \
-    && curl -L https://ollama.com/download/ollama-linux-amd64.tgz -o ollama.tgz \
-    && tar -C /usr -xzf ollama.tgz \
-    && rm ollama.tgz \
+    && curl -L https://ollama.com/download/ollama-linux-amd64 -o /usr/bin/ollama \
+    && chmod +x /usr/bin/ollama \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy installed packages from builder
