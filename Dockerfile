@@ -23,10 +23,17 @@ ENV PYTHONUNBUFFERED=1 \
     PATH="/root/.local/bin:$PATH"
 
 # Install Ollama binary (Direct binary download is more reliable)
-RUN apt-get update && apt-get install -y curl \
+RUN apt-get update && apt-get install -y curl openssh-server \
     && curl -L https://ollama.com/download/ollama-linux-amd64 -o /usr/bin/ollama \
     && chmod +x /usr/bin/ollama \
     && rm -rf /var/lib/apt/lists/*
+
+# Configure SSH for Azure Web SSH
+RUN mkdir -p /var/run/sshd \
+    && echo "root:Docker!" | chpasswd \
+    && echo "PermitRootLogin yes" >> /etc/ssh/sshd_config \
+    && echo "PasswordAuthentication yes" >> /etc/ssh/sshd_config \
+    && sed -i 's/#Port 22/Port 2222/' /etc/ssh/sshd_config
 
 # Copy installed packages from builder
 COPY --from=builder /root/.local /root/.local
@@ -38,9 +45,10 @@ RUN pip install --no-cache-dir gunicorn
 # Make entrypoint executable
 RUN chmod +x entrypoint.sh
 
-# Expose FastAPI and Ollama ports
+# Expose FastAPI, Ollama, and Azure SSH ports
 EXPOSE 8000
 EXPOSE 11434
+EXPOSE 2222
 
 # Healthcheck
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \

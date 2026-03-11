@@ -1,9 +1,10 @@
-﻿#!/bin/bash
+#!/bin/bash
 
-
+# Start SSH service for Azure Web SSH
+echo "Starting SSH service..."
+service ssh start
 
 # Start Ollama in the background
-
 echo "Starting Ollama engine..."
 
 ollama serve &
