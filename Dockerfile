@@ -1,9 +1,10 @@
 # Stage 1: Build dependencies
-FROM python:3.10-slim as builder
+FROM python:3.10-slim AS builder
 
 WORKDIR /app
 ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1
+    PYTHONDONTWRITEBYTECODE=1 \
+    PATH="/root/.local/bin:$PATH"
 
 RUN apt-get update && apt-get install -y \
     build-essential \
@@ -21,6 +22,13 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PATH="/root/.local/bin:$PATH"
 
+# Install Ollama binary
+RUN apt-get update && apt-get install -y curl \
+    && curl -L https://ollama.com/download/ollama-linux-amd64.tgz -o ollama.tgz \
+    && tar -C /usr -xzf ollama.tgz \
+    && rm ollama.tgz \
+    && rm -rf /var/lib/apt/lists/*
+
 # Copy installed packages from builder
 COPY --from=builder /root/.local /root/.local
 COPY . .
@@ -28,12 +36,16 @@ COPY . .
 # Install gunicorn for production
 RUN pip install --no-cache-dir gunicorn
 
-# Expose FastAPI port
+# Make entrypoint executable
+RUN chmod +x entrypoint.sh
+
+# Expose FastAPI and Ollama ports
 EXPOSE 8000
+EXPOSE 11434
 
 # Healthcheck
-HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
   CMD curl -f http://localhost:8000/health || exit 1
 
-# Start with Gunicorn for concurrency and stability
-CMD ["gunicorn", "server:app", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "-b", "0.0.0.0:8000"]
+# Start with entrypoint script
+ENTRYPOINT ["./entrypoint.sh"]
