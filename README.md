@@ -2,8 +2,6 @@
 
 **Retrieval-Augmented Question Answering System for University Policies**
 
-[![Azure Deploy](https://github.com/DiamondHoang/University-academic-regulations-rag/actions/workflows/azure-deploy.yml/badge.svg)](https://github.com/DiamondHoang/University-academic-regulations-rag/actions/workflows/azure-deploy.yml)
-
 This project implements a state-of-the-art **Retrieval-Augmented Generation (RAG)** system designed to provide accurate, grounded answers to questions regarding university academic regulations (quy định học vụ). By using official policy documents as its primary knowledge source, the system minimizes hallucinations and ensures high-fidelity responses.
 
 ---
