@@ -1,81 +1,124 @@
-# University Academic Regulations RAG  
-**Retrieval-Augmented Question Answering System**
+# University Academic Regulations RAG
 
-This project implements a **Retrieval-Augmented Generation (RAG)** system designed to **accurately answer questions about university academic regulations** (quy định học vụ) using **official policy documents** as grounded knowledge sources.
+**Retrieval-Augmented Question Answering System for University Policies**
 
-The system focuses on **faithful, document-grounded responses**, reducing hallucinations commonly found in standalone LLMs, and is suitable for real-world deployment in **student support and academic advisory systems**.
+[![Azure Deploy](https://github.com/DiamondHoang/University-academic-regulations-rag/actions/workflows/azure-deploy.yml/badge.svg)](https://github.com/DiamondHoang/University-academic-regulations-rag/actions/workflows/azure-deploy.yml)
+
+This project implements a state-of-the-art **Retrieval-Augmented Generation (RAG)** system designed to provide accurate, grounded answers to questions regarding university academic regulations (quy định học vụ). By using official policy documents as its primary knowledge source, the system minimizes hallucinations and ensures high-fidelity responses.
 
 ---
 
 ## Key Features
 
-- **Hybrid document retrieval** over academic regulation texts  
-- **LLM-powered answer generation** grounded in retrieved contexts  
-- **Source-based reasoning** over official policy documents  
-- **Evaluation with RAG metrics** (faithfulness, context precision/recall, answer correctness)  
-- Designed for **Vietnamese university academic regulations**
+- **Hybrid Retrieval Strategy**: Combines semantic search (BGE-M3) with metadata filtering and re-ranking for superior accuracy.
+- **Context-Aware Generation**: LLM-powered answers strictly grounded in retrieved document chunks.
+- **Vietnamese Language Support**: Optimized for university-specific terminology and Vietnamese academic context.
+- **Professional Web Interface**: Sleek, modern chat interface for seamless user interaction.
+- **Evaluation-Driven**: Performance tracked using RAGAS metrics (Faithfulness, Precision, Recall, Correctness).
+- **CI/CD Ready**: Fully containerized with GitHub Actions for automated deployment to Azure.
 
 ---
 
-## Evaluation Strategy
+## Architecture
 
-Evaluation was conducted using **RAGAS metrics** on a curated QA dataset derived from academic regulations:
+The system follows a modular RAG architecture:
 
-- **Faithfulness** – Is the answer supported by retrieved documents?
-- **Context Precision** – Are retrieved documents relevant?
-- **Context Recall** – Are all necessary documents retrieved?
-- **Answer Correctness** – Does the answer match the ground truth?
+```mermaid
+graph TD
+    User([User Query]) --> Pre[Pre-processing & Abbreviation Expansion]
+    Pre --> Ret[Hybrid Retriever]
+    Ret -->|Search| VDB[(Vector Database - Chroma)]
+    VDB -->|Retrieve| Docs[Candidate Documents]
+    Docs --> RR[Reranker - BGE-v2-m3]
+    RR -->|Top-K| Context[Ranked Context]
+    Context --> Gen[Response Generator - Ollama/LLM]
+    Gen -->|Grounded Answer| Ans[Final Response]
+    Ans --> User
+```
 
 ---
 
-### Model Comparison (Overall Scores)
+## Installation & Setup
 
-| Model          | Faithfulness | Context Precision | Context Recall | Answer Correctness |
-|----------------|-------------|-------------------|----------------|--------------------|
+### 1. Prerequisite: Ollama
+The system uses [Ollama](https://ollama.com/) to host LLMs locally or in the cloud.
+1. Install Ollama.
+2. Pull the required models:
+   ```bash
+   ollama pull deepseek-v3.1:671b-cloud
+   ```
+
+### 2. Local Setup
+```bash
+# Clone the repository
+git clone https://github.com/DiamondHoang/University-academic-regulations-rag.git
+cd University-academic-regulations-rag
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Run the server
+python server.py
+```
+Access the UI at `http://localhost:8000`.
+
+### 3. Docker Setup
+```bash
+# Using Docker Compose
+docker-compose up --build
+```
+
+---
+
+## Configuration
+
+The system is configured via environment variables (see `config.py` for details):
+
+| Variable | Description | Default |
+| :--- | :--- | :--- |
+| `LLM_MODEL` | The LLM to use for generation | `deepseek-v3.1:671b-cloud` |
+| `OLLAMA_BASE_URL` | URL for the Ollama server | `http://localhost:11434` |
+| `DB_PATH` | Path to persist the Vector DB | `vector_db` |
+| `EMBEDDING_MODEL` | HuggingFace embedding model | `BAAI/bge-m3` |
+| `BASE_PATH` | Directory containing source MD files | `md` |
+
+---
+
+## 📊 Evaluation & Model Comparison
+
+Evaluation was conducted using **RAGAS metrics** on a curated QA dataset:
+
+| Model | Faithfulness | Context Precision | Context Recall | Answer Correctness |
+| :--- | :--- | :--- | :--- | :--- |
 | **DeepSeek v3.1** | 0.8682 | 0.7550 | **0.8733** | **0.7992** |
-| **GPT-OSS**       | **0.8990** | **0.7683** | 0.8533 | 0.7157 |
-| **Qwen3 Coder**   | 0.8962 | 0.7533 | **0.8733** | 0.7417 |
+| **GPT-OSS** | **0.8990** | **0.7683** | 0.8533 | 0.7157 |
+| **Qwen3 Coder** | 0.8962 | 0.7533 | **0.8733** | 0.7417 |
+
+> [!NOTE]
+> **GPOT-OSS** excels in grounding (faithfulness), while **DeepSeek v3.1** provides the strongest reasoning and final answer correctness.
 
 ---
 
-## Analysis & Insights
+## Project Structure
 
-- **GPT-OSS** achieves the highest **faithfulness**, indicating strong grounding when relevant context is retrieved.
-- **DeepSeek v3.1** delivers the **best answer correctness**, suggesting superior reasoning and synthesis over retrieved academic regulations.
-- **Qwen3 Coder** shows balanced performance, particularly strong **context recall**, but slightly weaker answer accuracy.
-- Overall, results highlight a **trade-off between grounding strength and final answer correctness**, reinforcing the importance of retrieval quality and model selection in RAG systems.
-
-These findings demonstrate that **evaluation-driven model comparison** is critical for building reliable, domain-specific RAG applications.
-
----
-
-## Knowledge Base
-
-- **Source:** Official university academic regulation documents  
-- **Processing:**  
-  - Text normalization  
-  - Semantic chunking  
-  - Metadata-aware indexing  
-
-> All answers are generated **only from retrieved policy content**, ensuring verifiability.
+- `server.py`: FastAPI server and session management.
+- `uni_rag.py`: Core RAG logic and pipeline orchestration.
+- `config.py`: Centralized configuration and regex patterns.
+- `retrieval/`: Hybrid retrieval and response generation modules.
+- `loader/`: Document loading and pre-processing utilities.
+- `index.html`: Modern web-based chat interface.
+- `md/`: Source knowledge base (academic regulations in Markdown).
 
 ---
 
-## Future Improvements
+## Cloud Deployment
 
-- **Deployment & Accessibility**  
-  Deploy the system as a web-based or API-driven service to support real-time student queries and integration with university platforms.
+For detailed instructions on deploying to Azure using the provided GitHub Actions, see [AZURE_SETUP.md](AZURE_SETUP.md).
 
-- **Metadata-Enriched Knowledge Base**  
-  Introduce more structured and domain-specific metadata, especially for **temporal hierarchies**, this enables time-aware retrieval and prevents outdated policy answers.
+---
 
-- **Retrieval Optimization**  
-  Improve retrieval quality by:
-  - Applying reranking models (e.g., cross-encoders)
-  - Fine-tuning embeddings on academic regulation data
-  - Experimenting with adaptive chunking strategies based on document structure
+## 🤝 Contributing
 
-- **Answer Traceability**  
-  Add explicit citation mapping from answers to source documents to enhance transparency and trustworthiness.
+Contributions are welcome! Please feel free to submit a Pull Request.
 
 
