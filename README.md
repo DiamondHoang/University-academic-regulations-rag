@@ -23,7 +23,7 @@ The system follows a modular RAG architecture:
 
 ```mermaid
 graph TD
-    User([User Query]) --> Pre[Pre-processing & Abbreviation Expansion]
+    User([User Query]) --> Pre[Pre-processing and Abbreviation Expansion]
     Pre --> Ret[Hybrid Retriever]
     Ret -->|Search| VDB[(Vector Database - Chroma)]
     VDB -->|Retrieve| Docs[Candidate Documents]
@@ -82,7 +82,7 @@ The system is configured via environment variables (see `config.py` for details)
 
 ---
 
-## 📊 Evaluation & Model Comparison
+## Evaluation & Model Comparison
 
 Evaluation was conducted using **RAGAS metrics** on a curated QA dataset:
 
@@ -91,9 +91,6 @@ Evaluation was conducted using **RAGAS metrics** on a curated QA dataset:
 | **DeepSeek v3.1** | 0.8682 | 0.7550 | **0.8733** | **0.7992** |
 | **GPT-OSS** | **0.8990** | **0.7683** | 0.8533 | 0.7157 |
 | **Qwen3 Coder** | 0.8962 | 0.7533 | **0.8733** | 0.7417 |
-
-> [!NOTE]
-> **GPOT-OSS** excels in grounding (faithfulness), while **DeepSeek v3.1** provides the strongest reasoning and final answer correctness.
 
 ---
 
@@ -115,8 +112,5 @@ For detailed instructions on deploying to Azure using the provided GitHub Action
 
 ---
 
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
 
 
