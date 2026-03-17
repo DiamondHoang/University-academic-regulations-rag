@@ -22,10 +22,9 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PATH="/root/.local/bin:$PATH"
 
-# Install Ollama binary (Direct binary download is more reliable)
-RUN apt-get update && apt-get install -y curl openssh-server \
-    && curl -L https://ollama.com/download/ollama-linux-amd64 -o /usr/bin/ollama \
-    && chmod +x /usr/bin/ollama \
+# Install Ollama using official script
+RUN apt-get update && apt-get install -y curl openssh-server pciutils \
+    && curl -fsSL https://ollama.com/install.sh | sh \
     && rm -rf /var/lib/apt/lists/*
 
 # Configure SSH for Azure Web SSH
