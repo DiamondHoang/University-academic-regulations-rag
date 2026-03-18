@@ -1,7 +1,7 @@
 import os
 import logging
 import uuid
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Any, Tuple
 import re
 from langchain_text_splitters import RecursiveCharacterTextSplitter, MarkdownHeaderTextSplitter
 from langchain_chroma import Chroma
@@ -39,17 +39,11 @@ class UniversityRAG:
         self.embeddings = HuggingFaceEmbeddings(
             model_name=self.config["embedding_model"]
         )
-        self.llm = ChatOllama(
-            model=self.config["llm_model"],
-            temperature=Config.LLM_TEMPERATURE,
-            base_url=self.config.get("ollama_base_url", Config.OLLAMA_BASE_URL),
-            timeout=120.0
-        )
         self.vectorstore: Optional[Chroma] = None
         
         # Initialize modular components
         self.retriever: Optional[HybridRetriever] = None
-        self.response_generator = ResponseGenerator(self.llm)
+        self.response_generator = ResponseGenerator(self.config)
         self.memory = ConversationMemory(
             max_history=self.config["max_history"]
         )
@@ -138,7 +132,7 @@ class UniversityRAG:
         return all_chunks
     
     
-    def query(
+    async def aquery(
         self,
         question: str,
         doc_type: Optional[str] = None,
@@ -165,7 +159,7 @@ class UniversityRAG:
             
             # 2. Vector Retrieval (Simplified)
             try:
-                retrieved_docs = self.retriever.retrieve(
+                retrieved_docs = await self.retriever.aretrieve(
                     search_query,
                     k=self.config["max_retrieved_docs"],
                     doc_type=doc_type,
@@ -197,7 +191,7 @@ class UniversityRAG:
             conv_history = self.memory.get_context_string(include_last_n=2)
             
             try:
-                gen_result = self.response_generator.generate(
+                gen_result = await self.response_generator.agenerate(
                     query=question,
                     documents=ranked_docs,
                     conversation_history=conv_history,
@@ -222,9 +216,53 @@ class UniversityRAG:
             return answer
             
         except Exception as e:
-            logger.error(f"Global Query failed: {e}", exc_info=True)
             error_answer = f"Xin lỗi, có lỗi hệ thống xảy ra: {str(e)}"
             return error_answer
+
+    async def astream_query(
+        self,
+        question: str,
+        doc_type: Optional[str] = None,
+        regulation_type: Optional[str] = None,
+    ):
+        """Process a query and stream the response."""
+        try:
+            if not self.vectorstore:
+                yield "Vector store chưa được khởi tạo."
+                return
+            
+            search_query = self._preprocess_query(question)
+            
+            if not doc_type:
+                audience = self._detect_audience_heuristics(question)
+                doc_type = self._auto_detect_doc_type(audience)
+            
+            retrieved_docs = await self.retriever.aretrieve(
+                search_query,
+                k=self.config["max_retrieved_docs"],
+                doc_type=doc_type,
+                regulation_type=regulation_type,
+            )
+            
+            if not retrieved_docs:
+                yield "Tôi không tìm thấy thông tin liên quan trong các quy định hiện có."
+                return
+            
+            max_docs = self.config.get("max_response_docs", Config.MAX_RESPONSE_DOCS)
+            ranked_docs = retrieved_docs[:max_docs]
+            
+            conv_history = self.memory.get_context_string(include_last_n=2)
+            
+            async for chunk in self.response_generator.astream_generate(
+                query=question,
+                documents=ranked_docs,
+                conversation_history=conv_history
+            ):
+                yield chunk
+                
+        except Exception as e:
+            logger.error(f"Streaming Query failed: {e}", exc_info=True)
+            yield f"Xin lỗi, có lỗi hệ thống xảy ra trong khi tạo luồng phản hồi: {str(e)}"
     
     def _preprocess_query(self, query: str) -> str:
         """Preprocess user query to expand common university abbreviations.
@@ -348,11 +386,15 @@ class UniversityRAG:
                 if not user_input:
                     continue
                 
-                answer = self.query(
-                    user_input,
-                    doc_type=current_filter["doc_type"],
-                    regulation_type=current_filter["regulation_type"]
-                )
+                # Use a small helper to run async code in sync loop
+                import asyncio
+                async def _run():
+                    return await self.aquery(
+                        user_input,
+                        doc_type=current_filter["doc_type"],
+                        regulation_type=current_filter["regulation_type"]
+                    )
+                answer = asyncio.run(_run())
                 print(f"\nBot:\n{answer}")
                 
             except KeyboardInterrupt:

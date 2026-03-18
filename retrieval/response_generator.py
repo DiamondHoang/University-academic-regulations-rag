@@ -11,16 +11,25 @@ logger = logging.getLogger(__name__)
 class ResponseGenerator:
     """Modular Response Generator with multi-source grounding and Vietnamese prompts."""
 
-    def __init__(self, llm: ChatOllama):
+    def __init__(self, config: Dict):
         """Initialize response generator
         
         Args:
-            llm: ChatOllama instance
+            config: Configuration dictionary
         """
-        self.llm = llm
+        self.config = config
         self.confidence_threshold = Config.CONFIDENCE_THRESHOLD
 
-    def generate(
+    def _get_llm(self) -> ChatOllama:
+        """Create a fresh ChatOllama instance for the current event loop."""
+        return ChatOllama(
+            model=self.config["llm_model"],
+            temperature=self.config.get("llm_temperature", Config.LLM_TEMPERATURE),
+            base_url=self.config.get("ollama_base_url", Config.OLLAMA_BASE_URL),
+            timeout=120.0
+        )
+
+    async def agenerate(
         self,
         query: str,
         documents: List[Document],
@@ -49,10 +58,10 @@ class ResponseGenerator:
         # 3. LLM Call
         try:
             messages = self._build_messages(query, context, primary_source_index=1)
-            
+            llm = self._get_llm()
             logger.info(f"Generating answer with {len(selected_docs)} sources.")
             
-            response = self.llm.invoke(messages)
+            response = await llm.ainvoke(messages)
             answer = response.content.strip() if hasattr(response, 'content') else str(response)
         except Exception as e:
             logger.error(f"LLM generation failed: {e}")
@@ -69,6 +78,71 @@ class ResponseGenerator:
             "confidence": selected_docs[0].metadata.get("weighted_score", selected_docs[0].metadata.get("confidence_score", 0.0)) if selected_docs else 0.0,
             "sources": sources,
         }
+
+    async def astream_generate(
+        self,
+        query: str,
+        documents: List[Document],
+        conversation_history: str = "",
+    ):
+        """Stream response tokens using LLM.astream"""
+        selected_docs = self._filter_by_confidence(documents)
+        if not selected_docs:
+            yield "Không tìm thấy quy định liên quan."
+            return
+
+        max_docs: int = getattr(Config, "MAX_RESPONSE_DOCS", 4)
+        selected_docs = selected_docs[:max_docs]
+        context, sources = self._build_context(selected_docs)
+        
+        # 3. LLM Call
+        full_answer = "" # Accumulate for footer
+        try:
+            messages = self._build_messages(query, context, primary_source_index=1)
+            llm = self._get_llm()
+            
+            async for chunk in llm.astream(messages):
+                content = chunk.content if hasattr(chunk, 'content') else str(chunk)
+                full_answer += content # Accumulate content for footer
+                yield content
+        except Exception as e:
+            logger.error(f"LLM streaming failed: {e}")
+            yield "Hệ thống gặp sự cố khi tạo câu trả lời."
+            return # Stop streaming if an error occurs
+
+        # We can't easily append the footer *inside* the stream without confusing the UI
+        # if the UI expects just content. But usually, we can just yield the footer at the end.
+        footer = self._get_source_footer(full_answer, sources)
+        if footer:
+            yield "\n\n" + footer
+            
+    def _get_source_footer(self, answer: str, sources: List[Dict]) -> str:
+        """Extract logic to build the source footer from _format_response."""
+        # Collapse citations
+        answer = re.sub(r'\[Nguồn\s+(\d+)\]\s*\[\1\]', r'[\1]', answer)
+        answer = re.sub(r'\[Nguồn\s+(\d+)\]', r'[\1]', answer)
+        
+        cite_pattern = r'\[(\d+)\]'
+        all_matches = list(re.finditer(cite_pattern, answer))
+        
+        orig_to_new: Dict[int, Dict] = {}
+        next_new_idx: int = 1
+        for m in all_matches:
+            orig_idx = int(m.group(1))
+            if orig_idx not in orig_to_new:
+                source = next((s for s in sources if s["index"] == orig_idx), None)
+                if source:
+                    orig_to_new[orig_idx] = {"new_idx": next_new_idx, "source": source}
+                    next_new_idx += 1
+
+        if not orig_to_new: return ""
+        
+        cited_items = sorted(orig_to_new.values(), key=lambda x: x["new_idx"])
+        source_lines = ["Nguồn tham khảo:"]
+        for item in cited_items:
+            s = item["source"]
+            source_lines.append(f"[{item['new_idx']}] {s['title']} (Ban hành: {s['issue_date']})")
+        return "\n".join(source_lines)
 
     def _format_response(self, answer: str, sources: List[Dict]) -> str:
         """Format final answer with sequential source indexing."""

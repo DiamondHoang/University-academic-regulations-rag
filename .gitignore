@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+
+# Vector DB
+vector_db/
+*.lock
+
+# Evaluation (Removed project part)
+rag_eval_results/
+dataset.json
+test.py
+
+# Docker
+.dockerignore

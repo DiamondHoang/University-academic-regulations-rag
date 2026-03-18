@@ -34,7 +34,7 @@ class HybridRetriever:
         """Deprecated: Logic removed."""
         pass
 
-    def retrieve(
+    async def aretrieve(
         self,
         query: str,
         k: int = 5,
@@ -46,11 +46,11 @@ class HybridRetriever:
             # 1. Search Stage (Vector only)
             # Fetch more candidates for re-ranking
             fetch_k = Config.TOP_K_RERANK if self.reranker else k * 2
-            retrieved_docs = self._vector_only_search(query, fetch_k, doc_type, regulation_type)
+            retrieved_docs = await self._avector_only_search(query, fetch_k, doc_type, regulation_type)
             
             if not retrieved_docs and (doc_type or regulation_type):
                 logger.warning(f"Filtered retrieval returned 0 results. Falling back to unfiltered.")
-                retrieved_docs = self._vector_only_search(query, fetch_k, None, None)
+                retrieved_docs = await self._avector_only_search(query, fetch_k, None, None)
 
             if not retrieved_docs:
                 return []
@@ -58,9 +58,12 @@ class HybridRetriever:
             # 2. Re-ranking Stage (Cross-Encoder)
             if self.reranker and len(retrieved_docs) > 1:
                 try:
+                    import asyncio
                     # Prepare pairs for cross-encoder
                     pairs = [[query, doc.page_content] for doc in retrieved_docs]
-                    scores = self.reranker.predict(pairs)
+                    
+                    # Run CPU-intensive re-ranking in a thread to keep async loop responsive
+                    scores = await asyncio.to_thread(self.reranker.predict, pairs)
                     
                     # Update scores in metadata
                     for i, score in enumerate(scores):
@@ -83,9 +86,10 @@ class HybridRetriever:
             logger.error(f"Retrieval pipeline failed: {e}")
             return []
 
-    def _vector_only_search(self, query: str, k: int, doc_type: Optional[str], regulation_type: Optional[str]) -> List[Document]:
+    async def _avector_only_search(self, query: str, k: int, doc_type: Optional[str], regulation_type: Optional[str]) -> List[Document]:
         """Pure vector search with metadata filtering, using real relevance scores."""
-        candidate_k = max(k * 4, 20)
+        import asyncio
+        candidate_k = int(k * 1.5)
         
         chroma_filter = {}
         if doc_type:
@@ -108,8 +112,14 @@ class HybridRetriever:
                 vector_kwargs["filter"] = {"$and": conditions}
 
         try:
-            # Vector search with relevance scores
-            scored = self.vectorstore.similarity_search_with_relevance_scores(query, **vector_kwargs)
+            # Vector search with relevance scores - using asyncio.to_thread
+            # which automatically handles the event loop and thread pool
+            import asyncio
+            scored = await asyncio.to_thread(
+                self.vectorstore.similarity_search_with_relevance_scores,
+                query, 
+                **vector_kwargs
+            )
             docs = []
             for doc, score in scored:
                 doc.metadata["confidence_score"] = round(float(score), 4)

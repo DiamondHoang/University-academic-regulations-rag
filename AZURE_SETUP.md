@@ -28,7 +28,7 @@ Follow these steps to set up the necessary Azure resources and configure your Gi
 ## 2. Configure Environment Variables in Azure
 
 Go to your App Service -> **Configuration** -> **Application settings** and add:
-- `OLLAMA_BASE_URL`: The URL of your Ollama cloud/server endpoint.
+- `OLLAMA_BASE_URL`: `http://localhost:11434` (Note: Use `localhost` since Ollama runs inside the container. **Avoid** `host.docker.internal` in Azure).
 - `LLM_MODEL`: e.g., `deepseek-v3.1:671b-cloud`.
 - `DB_PATH`: `vector_db`.
 - `WEBSITES_PORT`: `8000` (CRITICAL: Tells Azure your app is on port 8000).

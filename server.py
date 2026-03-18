@@ -4,17 +4,28 @@ import traceback
 from datetime import datetime
 from typing import Optional, List, Dict
 from pathlib import Path
+from contextlib import asynccontextmanager
 from concurrent.futures import ThreadPoolExecutor
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+import uvicorn
 from config import Config
 from loader.doc_loader import RegulationDocumentLoader
 from uni_rag import UniversityRAG
 # ─────────────────────────────────────────────────────────────────────────────
 
-app = FastAPI(title="University Regulation Chatbot")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifespan event handler for FastAPI."""
+    # Run RAG init as a background task in the main event loop
+    asyncio.create_task(_build_shared_rag())
+    yield
+    # Shutdown
+    _executor.shutdown(wait=False)
+
+app = FastAPI(title="University Regulation Chatbot", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -34,17 +45,22 @@ _shared_rag: Optional[UniversityRAG] = None
 _rag_error: Optional[str] = None
 
 
-def _build_shared_rag():
-    """Build the shared RAG — runs in a thread on startup."""
+async def _build_shared_rag():
+    """Build the shared RAG — runs as an async task on startup."""
     global _shared_rag, _rag_error
     try:
-        # DB initialization is now handled by entrypoint.sh
-        # We just load it here
+        # 1. Disk/CPU intensive loading in a thread
         loader = RegulationDocumentLoader(base_path=Config.BASE_PATH)
+        documents = await asyncio.to_thread(loader.load_documents)
+        
+        # 2. Create RAG instance in the MAIN LOOP (ensures async components capture correct loop)
         rag = UniversityRAG()
-        documents = loader.load_documents()
-        rag.build_vectorstore(documents, force_rebuild=False)
+        
+        # 3. Vectorstore building in a thread
+        await asyncio.to_thread(rag.build_vectorstore, documents, force_rebuild=False)
+        
         _shared_rag = rag
+        print("RAG initialization complete.")
     except Exception as e:
         _rag_error = str(e)
         print(f"RAG initialization failed: {e}")
@@ -101,13 +117,6 @@ class SessionDetail(BaseModel):
     messages: List[MessageItem]
 
 
-# Lifecycle
-
-@app.on_event("startup")
-async def startup_event():
-    loop = asyncio.get_event_loop()
-    # Non-blocking: RAG init runs in background thread
-    loop.run_in_executor(_executor, _build_shared_rag)
 
 
 # Health / debug 
@@ -197,7 +206,7 @@ async def rename_session(session_id: str, body: dict):
 
 # Chat route 
 
-@app.post("/chat", response_model=ChatResponse)
+@app.post("/chat")
 async def chat(req: ChatRequest):
     if _shared_rag is None:
         raise HTTPException(status_code=503, detail="RAG is still initializing. Check /health and retry in a moment.")
@@ -213,27 +222,29 @@ async def chat(req: ChatRequest):
     if len(data["messages"]) == 1:
         data["title"] = req.message[:60] + ("…" if len(req.message) > 60 else "")
 
-    def _run_query():
-        return rag.query(
-            question=req.message,
-            doc_type=req.doc_type,
-            regulation_type=req.regulation_type,
-        )
+    async def _streamer():
+        full_answer = ""
+        try:
+            async for chunk in rag.astream_query(
+                question=req.message,
+                doc_type=req.doc_type,
+                regulation_type=req.regulation_type,
+            ):
+                full_answer += chunk
+                yield chunk
+            
+            # Record the full answer in session history after stream ends
+            data["messages"].append({
+                "role": "assistant",
+                "content": full_answer,
+                "timestamp": datetime.utcnow().isoformat(),
+            })
+        except Exception as e:
+            traceback.print_exc()
+            err_msg = f"\n[Lỗi: {str(e)}]"
+            yield err_msg
 
-    try:
-        loop = asyncio.get_event_loop()
-        answer = await loop.run_in_executor(_executor, _run_query)
-    except Exception as e:
-        traceback.print_exc()
-        answer = f"Xin lỗi, có lỗi xảy ra khi xử lý câu hỏi: {str(e)}"
-
-    data["messages"].append({
-        "role": "assistant",
-        "content": answer,
-        "timestamp": datetime.utcnow().isoformat(),
-    })
-
-    return ChatResponse(answer=answer, session_id=req.session_id)
+    return StreamingResponse(_streamer(), media_type="text/plain")
 
 
 # Serve frontend
@@ -245,3 +256,6 @@ async def serve_frontend():
     if FRONTEND.exists():
         return FileResponse(FRONTEND)
     return {"message": "Place index.html in the same folder as server.py"}
+
+if __name__ == "__main__":
+    uvicorn.run("server:app", host="0.0.0.0", port=8000, reload=True)

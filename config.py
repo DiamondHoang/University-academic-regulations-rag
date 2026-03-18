@@ -13,7 +13,7 @@ class Config:
     # Re-ranker Settings
     RERANKER_MODEL = os.environ.get("RERANKER_MODEL", "BAAI/bge-reranker-v2-m3")
     USE_RERANKER = True
-    TOP_K_RERANK = 20
+    TOP_K_RERANK = 12  # Reduced from 20 to speed up re-ranking
 
     # LLM Settings — cloud models require: docker exec -it ollama ollama signin
     LLM_MODEL = os.environ.get("LLM_MODEL", "deepseek-v3.1:671b-cloud")
@@ -24,7 +24,7 @@ class Config:
     MAX_CONTEXT_LENGTH = 8000
     SIMILARITY_THRESHOLD = 0.2
     MAX_CHUNKS_PER_FILE = 1  # Strictly 1 chunk per file to avoid duplicates
-    MAX_RESPONSE_DOCS = 7    # Allow multiple docs to let LLM resolve updates via date
+    MAX_RESPONSE_DOCS = 4    # Reduced from 7 to improve LLM processing speed
     
     CHUNK_SIZE = 1000
     CHUNK_OVERLAP = 200
