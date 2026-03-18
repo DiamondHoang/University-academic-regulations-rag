@@ -38,13 +38,7 @@ fi
 
 
 # Start the FastAPI application
-
-echo "Preparing vector database..."
-python scripts/init_db.py
-if [ $? -ne 0 ]; then
-    echo "Warning: Database initialization failed. Server may start with missing or stale data."
-fi
-
 echo "Starting FastAPI application..."
+# Note: DB initialization is handled by server.py in a background thread to avoid startup timeout
 
 exec gunicorn server:app -w 4 -k uvicorn.workers.UvicornWorker -b 0.0.0.0:8000

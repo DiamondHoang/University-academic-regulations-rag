@@ -118,7 +118,8 @@ async def health():
     if _rag_error:
         return JSONResponse(status_code=500, content={"status": "error", "detail": _rag_error})
     if _shared_rag is None:
-        return JSONResponse(status_code=503, content={"status": "loading", "detail": "RAG is still initializing..."})
+        # Return 200 instead of 503 so Azure warmup probes don't fail during initialization
+        return JSONResponse(status_code=200, content={"status": "loading", "detail": "RAG is still initializing..."})
     return {"status": "ok", "vectorstore": "ready"}
 
 
