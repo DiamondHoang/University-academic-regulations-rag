@@ -116,8 +116,18 @@ class HybridRetriever:
                 docs.append(doc)
             return docs
         except Exception as e:
-            logger.error(f"Vector search failed: {e}")
-            return self.vectorstore.similarity_search(query, **vector_kwargs)
+            error_msg = str(e)
+            logger.error(f"Vector search failed: {error_msg}")
+            
+            # Specialized handling for ChromaDB "Error finding id" or plan execution errors
+            if "Error finding id" in error_msg or "Internal error" in error_msg:
+                logger.warning("Detected potential ChromaDB index issue. Attempting basic similarity search fallback.")
+                try:
+                    return self.vectorstore.similarity_search(query, **vector_kwargs)
+                except Exception as inner_e:
+                    logger.error(f"Fallback similarity search also failed: {inner_e}")
+            
+            return []
 
     def _parse_date(self, date_str: Any) -> float:
         """Parse Vietnamese date strings to timestamp for comparison."""

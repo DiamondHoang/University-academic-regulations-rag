@@ -38,6 +38,8 @@ def _build_shared_rag():
     """Build the shared RAG — runs in a thread on startup."""
     global _shared_rag, _rag_error
     try:
+        # DB initialization is now handled by entrypoint.sh
+        # We just load it here
         loader = RegulationDocumentLoader(base_path=Config.BASE_PATH)
         rag = UniversityRAG()
         documents = loader.load_documents()
@@ -51,6 +53,10 @@ def _build_shared_rag():
 
 def _make_session_rag() -> UniversityRAG:
     """New RAG instance sharing the already-built vectorstore/retriever."""
+    if _shared_rag is None:
+         # Fallback just in case, though it should be initialized by now
+         _build_shared_rag()
+         
     base = _shared_rag
     session_rag = UniversityRAG()
     session_rag.vectorstore = base.vectorstore

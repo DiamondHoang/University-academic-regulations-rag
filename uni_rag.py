@@ -67,10 +67,19 @@ class UniversityRAG:
                 collection_metadata=Config.EMBEDDING_KWARGS
             )
         else:
-            self.vectorstore = Chroma(
-                persist_directory=self.config["db_path"],
-                embedding_function=self.embeddings
-            )
+            try:
+                self.vectorstore = Chroma(
+                    persist_directory=self.config["db_path"],
+                    embedding_function=self.embeddings
+                )
+            except Exception as e:
+                logger.warning(f"Initial ChromaDB load failed, retrying once: {e}")
+                import time
+                time.sleep(2) # Give it a moment if it's a file lock
+                self.vectorstore = Chroma(
+                    persist_directory=self.config["db_path"],
+                    embedding_function=self.embeddings
+                )
         
         self.retriever = HybridRetriever(self.vectorstore)
     
