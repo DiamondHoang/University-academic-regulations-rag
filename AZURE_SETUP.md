@@ -31,6 +31,8 @@ Go to your App Service -> **Configuration** -> **Application settings** and add:
 - `OLLAMA_BASE_URL`: The URL of your Ollama cloud/server endpoint.
 - `LLM_MODEL`: e.g., `deepseek-v3.1:671b-cloud`.
 - `DB_PATH`: `vector_db`.
+- `WEBSITES_PORT`: `8000` (CRITICAL: Tells Azure your app is on port 8000).
+- `WEBSITES_CONTAINER_START_TIME_LIMIT`: `600` (Recommended: Prevents timeout while loading models).
 - `PORT`: `8000`.
 
 ---

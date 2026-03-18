@@ -8,6 +8,12 @@ from langchain_chroma import Chroma
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_ollama import ChatOllama
 from langchain_core.documents import Document
+try:
+    import fcntl
+except ImportError:
+    # fcntl is not available on Windows, provide a dummy for local dev
+    fcntl = None
+import time
 
 from config import Config
 from memory.conversation_memory import ConversationMemory
@@ -50,38 +56,53 @@ class UniversityRAG:
         self.all_chunks: List[Document] = []
     
     def build_vectorstore(self, documents: List[Document], force_rebuild: bool = False) -> None:
-        """Build vector store and initialize retriever
+        """Build vector store and initialize retriever with concurrency protection."""
+        lock_path = f"{self.config['db_path']}.lock"
+        os.makedirs(os.path.dirname(lock_path) if os.path.dirname(lock_path) else ".", exist_ok=True)
         
-        Args:
-            documents: List of documents to embed
-            force_rebuild: Force rebuild even if store exists
-        """
-        chunks = self._split_documents(documents)
-        self.all_chunks = chunks
-        
-        if force_rebuild or not os.path.exists(self.config["db_path"]):
-            self.vectorstore = Chroma.from_documents(
-                documents=chunks,
-                embedding=self.embeddings,
-                persist_directory=self.config["db_path"],
-                collection_metadata=Config.EMBEDDING_KWARGS
-            )
-        else:
-            try:
-                self.vectorstore = Chroma(
+        lock_fd = os.open(lock_path, os.O_RDWR | os.O_CREAT)
+        try:
+            # Acquire an exclusive lock (blocks if another worker is initializing)
+            if fcntl:
+                logger.info("Acquiring lock for vectorstore initialization...")
+                fcntl.flock(lock_fd, fcntl.LOCK_EX)
+                logger.info("Lock acquired.")
+            else:
+                logger.warning("fcntl not available. Skipping file lock (only safe for single-worker).")
+
+            chunks = self._split_documents(documents)
+            self.all_chunks = chunks
+            
+            if force_rebuild or not os.path.exists(self.config["db_path"]):
+                logger.info("Creating new vectorstore...")
+                self.vectorstore = Chroma.from_documents(
+                    documents=chunks,
+                    embedding=self.embeddings,
                     persist_directory=self.config["db_path"],
-                    embedding_function=self.embeddings
+                    collection_metadata=Config.EMBEDDING_KWARGS
                 )
-            except Exception as e:
-                logger.warning(f"Initial ChromaDB load failed, retrying once: {e}")
-                import time
-                time.sleep(2) # Give it a moment if it's a file lock
-                self.vectorstore = Chroma(
-                    persist_directory=self.config["db_path"],
-                    embedding_function=self.embeddings
-                )
-        
-        self.retriever = HybridRetriever(self.vectorstore)
+            else:
+                logger.info("Loading existing vectorstore...")
+                try:
+                    self.vectorstore = Chroma(
+                        persist_directory=self.config["db_path"],
+                        embedding_function=self.embeddings
+                    )
+                except Exception as e:
+                    logger.warning(f"Initial ChromaDB load failed, retrying once: {e}")
+                    time.sleep(2) 
+                    self.vectorstore = Chroma(
+                        persist_directory=self.config["db_path"],
+                        embedding_function=self.embeddings
+                    )
+            
+            self.retriever = HybridRetriever(self.vectorstore)
+        finally:
+            # Release the lock
+            if fcntl:
+                fcntl.flock(lock_fd, fcntl.LOCK_UN)
+                logger.info("Lock released.")
+            os.close(lock_fd)
     
     def _split_documents(self, documents: List[Document]) -> List[Document]:
         """Split documents into chunks
