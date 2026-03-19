@@ -33,7 +33,7 @@ The system is built on a modern RAG pipeline:
 ```mermaid
 graph TD
     User([User]) --> Rewriter[Query Rewriter - Multi-turn Handler]
-    Rewriter --> Ret[Hybrid Retriever - Semantic Search]
+    Rewriter --> Ret[Retriever - Semantic Search]
     Ret -->|Query| VDB[(Vector DB - Chroma)]
     VDB -->|Extract| Docs[Official Regulations]
     Docs --> RR[Async Reranker - Content Mapping]
