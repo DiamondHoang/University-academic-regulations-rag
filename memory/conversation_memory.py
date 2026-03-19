@@ -13,19 +13,25 @@ class ConversationMemory:
     reliably serialized to JSON.  The storage file is updated on every change.
     """
 
-    def __init__(self, max_history: int = 5, persist_path: Optional[str] = None):
+    def __init__(self, max_history: int = 5, session_id: Optional[str] = None, disable_persistence: bool = False):
         """Initialize conversation memory
 
         Args:
             max_history: Maximum number of turns to keep
-            persist_path: Optional path to JSON file for persistence
+            session_id: Optional session ID for unique persistence
+            disable_persistence: If True, do not save/load from disk
         """
         self.max_history = max_history
         self.history: List[Dict] = []
-        # Default persistence file in the same folder as this module
-        default_path = Path(__file__).parent / "history.json"
-        self.persist_file = Path(persist_path) if persist_path else default_path
-        self._load_history()
+        self.disable_persistence = disable_persistence
+        
+        # Determine persistence path
+        if disable_persistence:
+            self.persist_file = None
+        else:
+            filename = f"history_{session_id}.json" if session_id else "history.json"
+            self.persist_file = Path(__file__).parent / filename
+            self._load_history()
 
     def _doc_to_dict(self, doc: Document) -> Dict:
         """Convert a langchain Document into a JSON-friendly dict."""
@@ -121,6 +127,9 @@ class ConversationMemory:
 
     def _save_history(self) -> None:
         """Persist history to JSON file with JSON-friendly serialization."""
+        if self.disable_persistence or not self.persist_file:
+            return
+
         def _json_default(o):
             # convert Document->dict; datetime->iso string; fallback to str
             if isinstance(o, Document):

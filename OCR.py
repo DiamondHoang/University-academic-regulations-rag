@@ -10,7 +10,7 @@ from azure.core.credentials import AzureKeyCredential
 ENDPOINT = os.environ["AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT"]
 KEY = os.environ["AZURE_DOCUMENT_INTELLIGENCE_KEY"]
 
-IMAGES_DIR = Path(r"D:\Projects\Chatbot\images\DTDH\QDHV\Quy định về học vụ và đào tạo - Phiên bản hợp nhất")
+IMAGES_DIR = Path("images/DTDH/QDHV/Quy định về học vụ và đào tạo - Phiên bản hợp nhất")
 MD_DIR = Path("md")
 
 SUPPORTED_EXTS = (".png", ".jpg", ".jpeg", ".tif", ".tiff")

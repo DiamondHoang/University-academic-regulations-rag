@@ -1,242 +1,245 @@
 import os
 import logging
-import uuid
-from typing import List, Optional, Dict, Any, Tuple
 import re
-from langchain_text_splitters import RecursiveCharacterTextSplitter, MarkdownHeaderTextSplitter
+import time
+import asyncio
+from typing import List, Optional, Dict, Any, AsyncGenerator
+
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_chroma import Chroma
 from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_ollama import ChatOllama
 from langchain_core.documents import Document
+
 try:
     import fcntl
 except ImportError:
     # fcntl is not available on Windows, provide a dummy for local dev
     fcntl = None
-import time
 
 from config import Config
 from memory.conversation_memory import ConversationMemory
-from retrieval.hybrid_retriever import HybridRetriever
+from retrieval.vector_retriever import VectorRetriever
 from retrieval.response_generator import ResponseGenerator
-from loader.doc_loader import RegulationDocumentLoader
 
+# Standardized logging configuration
 logging.basicConfig(level=logging.ERROR, format='%(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 
 class UniversityRAG:
-    """RAG system for university regulations with modular components"""
+    """Core RAG system for university regulations with modular retrieval and generation components."""
     
-    def __init__(self, config: Optional[Dict] = None):
-        """Initialize RAG system with configuration
+    def __init__(
+        self, 
+        config: Optional[Dict] = None, 
+        session_id: Optional[str] = None,
+        embeddings: Optional[HuggingFaceEmbeddings] = None,
+        response_generator: Optional[ResponseGenerator] = None
+    ):
+        """Initialize the RAG system.
         
         Args:
-            config: Optional configuration dictionary to override defaults
+            config: Optional configuration overrides.
+            session_id: Optional session ID for memory isolation and persistence.
+            embeddings: Optional shared embeddings instance to save memory.
+            response_generator: Optional shared response generator instance.
         """
         self.config = {**Config.as_dict(), **(config or {})}
         
-        self.embeddings = HuggingFaceEmbeddings(
+        # 1. Initialize Embeddings
+        self.embeddings = embeddings or HuggingFaceEmbeddings(
             model_name=self.config["embedding_model"]
         )
-        self.vectorstore: Optional[Chroma] = None
         
-        # Initialize modular components
-        self.retriever: Optional[HybridRetriever] = None
-        self.response_generator = ResponseGenerator(self.config)
+        # 2. Setup Vector Store and Components
+        self.vectorstore: Optional[Chroma] = None
+        self.retriever: Optional[VectorRetriever] = None
+        
+        # 3. Initialize Response Generation and Memory
+        self.response_generator = response_generator or ResponseGenerator(self.config)
         self.memory = ConversationMemory(
-            max_history=self.config["max_history"]
+            max_history=self.config["max_history"],
+            session_id=session_id
         )
         self.all_chunks: List[Document] = []
     
     def build_vectorstore(self, documents: List[Document], force_rebuild: bool = False) -> None:
-        """Build vector store and initialize retriever with concurrency protection."""
-        lock_path = f"{self.config['db_path']}.lock"
+        """Initialize or load the vector store with optional concurrency protection.
+        
+        Args:
+            documents: List of pre-loaded Documents.
+            force_rebuild: If True, delete and recreate the vector store.
+        """
+        db_path = self.config["db_path"]
+        lock_path = f"{db_path}.lock"
+        
+        # Ensure directory exists for locking and storage
         os.makedirs(os.path.dirname(lock_path) if os.path.dirname(lock_path) else ".", exist_ok=True)
         
         lock_fd = os.open(lock_path, os.O_RDWR | os.O_CREAT)
         try:
-            # Acquire an exclusive lock (blocks if another worker is initializing)
+            # Concurrency Protection: Acquire an exclusive lock (blocks others)
             if fcntl:
                 logger.info("Acquiring lock for vectorstore initialization...")
                 fcntl.flock(lock_fd, fcntl.LOCK_EX)
                 logger.info("Lock acquired.")
             else:
-                logger.warning("fcntl not available. Skipping file lock (only safe for single-worker).")
+                logger.warning("fcntl not available. Skipping cross-process file lock (not safe for single-worker).")
 
+            # 1. Split documents into manageable chunks
             chunks = self._split_documents(documents)
             self.all_chunks = chunks
             
-            if force_rebuild or not os.path.exists(self.config["db_path"]):
-                logger.info("Creating new vectorstore...")
+            # 2. Build or Load ChromaDB
+            if force_rebuild or not os.path.exists(db_path):
+                logger.info("Building new vectorstore...")
                 self.vectorstore = Chroma.from_documents(
                     documents=chunks,
                     embedding=self.embeddings,
-                    persist_directory=self.config["db_path"],
+                    persist_directory=db_path,
                     collection_metadata=Config.EMBEDDING_KWARGS
                 )
             else:
                 logger.info("Loading existing vectorstore...")
-                try:
-                    self.vectorstore = Chroma(
-                        persist_directory=self.config["db_path"],
-                        embedding_function=self.embeddings
-                    )
-                except Exception as e:
-                    logger.warning(f"Initial ChromaDB load failed, retrying once: {e}")
-                    time.sleep(2) 
-                    self.vectorstore = Chroma(
-                        persist_directory=self.config["db_path"],
-                        embedding_function=self.embeddings
-                    )
+                self.vectorstore = self._load_chroma_with_retry(db_path)
             
-            self.retriever = HybridRetriever(self.vectorstore)
+            # 3. Initialize the Hybrid Retriever
+            self.retriever = VectorRetriever(self.vectorstore)
+            
         finally:
-            # Release the lock
             if fcntl:
                 fcntl.flock(lock_fd, fcntl.LOCK_UN)
                 logger.info("Lock released.")
             os.close(lock_fd)
     
+    def _load_chroma_with_retry(self, path: str, retries: int = 1) -> Chroma:
+        """Helper to load ChromaDB with a simple retry on collision errors."""
+        for attempt in range(retries + 1):
+            try:
+                return Chroma(
+                    persist_directory=path,
+                    embedding_function=self.embeddings
+                )
+            except Exception as e:
+                if attempt < retries:
+                    logger.warning(f"ChromaDB load attempt {attempt+1} failed ({e}), retrying...")
+                    time.sleep(2)
+                else:
+                    raise e
+
     def _split_documents(self, documents: List[Document]) -> List[Document]:
-        """Split documents into chunks
-        
-        Args:
-            documents: Documents to split
-            
-        Returns:
-            List of document chunks with metadata
-        """
-        # Clean documents by removing page headers
-        cleaned_documents = [
-            Document(
-                page_content=self._clean_page_headers(doc.page_content),
-                metadata=doc.metadata
-            )
-            for doc in documents
-        ]
-        
-        # Process documents with standard text splitting
+        """Split documents into chunks using configuration rules."""
         text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=Config.CHUNK_SIZE,
-            chunk_overlap=Config.CHUNK_OVERLAP,
+            chunk_size=self.config["chunk_size"],
+            chunk_overlap=self.config["chunk_overlap"],
             separators=Config.SEPARATORS,
             length_function=len,
         )
-        all_chunks = text_splitter.split_documents(cleaned_documents)
+        all_chunks = text_splitter.split_documents(documents)
         
-        # Add chunk IDs
+        # Assign unique chunk IDs for tracking
         for i, chunk in enumerate(all_chunks):
             chunk.metadata["chunk_id"] = i
         
         return all_chunks
-    
     
     async def aquery(
         self,
         question: str,
         doc_type: Optional[str] = None,
         regulation_type: Optional[str] = None,
-        k: int = 5
+        k: Optional[int] = None
     ) -> str:
-        """Process a query and return answer with caching and robust fallbacks."""
+        """Process a query asynchronously and return the generated answer."""
         try:
-            if not self.vectorstore:
-                return "Vector store chưa được khởi tạo."
+            if not self.vectorstore or not self.retriever:
+                return "Hệ thống RAG chưa được khởi tạo hoàn toàn (thiếu vectorstore)."
             
-            # Preprocess question: expand abbreviations
-            processed_question = self._preprocess_query(question)
+            # 1. Query Expansion & Rewriting
+            # Use conversation history to make the query standalone
+            conv_history = self.memory.get_context_string(include_last_n=3)
             
-            conversation_history = self.memory.get_history()
+            if self._should_rewrite_query(question, conv_history):
+                search_query = await self.response_generator.rewrite_query(question, conv_history)
+            else:
+                search_query = question
+                
+            search_query = self._preprocess_query(search_query)
             
-            # 1. Expand query and detect filters via heuristics
-            search_query = self._preprocess_query(question)
-            
-            # Simple heuristic audience detection if doc_type not provided
+            # 2. Audience & Metadata Detection
             if not doc_type:
-                audience = self._detect_audience_heuristics(question)
+                audience = self._detect_audience_heuristics(search_query)
                 doc_type = self._auto_detect_doc_type(audience)
             
-            # 2. Vector Retrieval (Simplified)
-            try:
-                retrieved_docs = await self.retriever.aretrieve(
-                    search_query,
-                    k=self.config["max_retrieved_docs"],
-                    doc_type=doc_type,
-                    regulation_type=regulation_type,
-                )
-            except Exception as e:
-                logger.error(f"Retrieval failed: {e}")
-                return "Xin lỗi, tôi gặp sự cố khi tìm kiếm thông tin văn bản."
+            # 3. Document Retrieval
+            retrieved_docs = await self.retriever.aretrieve(
+                search_query,
+                k=k or self.config["max_retrieved_docs"],
+                doc_type=doc_type,
+                regulation_type=regulation_type,
+            )
             
             if not retrieved_docs:
                 answer = "Tôi không tìm thấy thông tin liên quan trong các quy định hiện có."
                 self.memory.add_turn(question, answer)
                 return answer
             
-            # 4. Response Generation with Fallback
+            # 4. Filter and Rank
             max_docs = self.config.get("max_response_docs", Config.MAX_RESPONSE_DOCS)
             ranked_docs = retrieved_docs[:max_docs]
             
-            # Print retrieved documents for visibility
-            # print(f"\n[Thông tin tìm thấy: {len(ranked_docs)} tài liệu]")
-            # for i, doc in enumerate(ranked_docs, 1):
-            #     title = doc.metadata.get("title", "Không rõ tiêu đề")
-            #     date = doc.metadata.get("issue_date", "Không rõ ngày")
-            #     score = doc.metadata.get("confidence_score", 0.0)
-            #     print(f"  {i}. {title} (Ban hành: {date}) - Score: {score}")
-            #     print(f"     Nội dung: {doc.page_content[:300]}...") # In 300 ký tự đầu để tránh quá dài
-            #     print("-" * 30)
-            
-            conv_history = self.memory.get_context_string(include_last_n=2)
-            
+            # 5. Answer Generation
             try:
                 gen_result = await self.response_generator.agenerate(
                     query=question,
                     documents=ranked_docs,
-                    conversation_history=conv_history,
-                    analysis={}, # No longer using query analysis
-                    clean_mode=False,
+                    conversation_history=self.memory.get_context_string(include_last_n=2),
                 )
                 answer = gen_result.get("answer", "")
             except Exception as e:
                 logger.error(f"Generation failed: {e}")
-                # Fallback: Just return titles of found documents if generation fails
-                found_titles = list(set([d.metadata.get("title", "Không rõ tiêu đề") for d in ranked_docs]))
-                answer = f"Tôi đã tìm thấy thông tin trong các văn bản sau nhưng gặp lỗi khi tóm tắt: {', '.join(found_titles)}. Vui lòng thử lại sau."
+                answer = "Hệ thống gặp sự cố khi tạo câu trả lời. Vui lòng thử lại sau."
             
-            # Update memory and cache
-            turn_data = {
+            # 6. Update Memory
+            self.memory.add_turn_with_data({
                 "question": question,
                 "answer": answer,
                 "documents": ranked_docs,
-            }
-            self.memory.add_turn_with_data(turn_data)
+            })
             
             return answer
             
         except Exception as e:
-            error_answer = f"Xin lỗi, có lỗi hệ thống xảy ra: {str(e)}"
-            return error_answer
+            logger.error(f"Aquery failed: {e}", exc_info=True)
+            return f"Xin lỗi, có lỗi hệ thống xảy ra: {str(e)}"
 
     async def astream_query(
         self,
         question: str,
         doc_type: Optional[str] = None,
         regulation_type: Optional[str] = None,
-    ):
-        """Process a query and stream the response."""
+    ) -> AsyncGenerator[str, None]:
+        """Process a query and stream the response tokens."""
         try:
-            if not self.vectorstore:
+            if not self.vectorstore or not self.retriever:
                 yield "Vector store chưa được khởi tạo."
                 return
             
-            search_query = self._preprocess_query(question)
+            # 1. Prepare Query
+            conv_history = self.memory.get_context_string(include_last_n=3)
+            
+            if self._should_rewrite_query(question, conv_history):
+                search_query = await self.response_generator.rewrite_query(question, conv_history)
+            else:
+                search_query = question
+                
+            search_query = self._preprocess_query(search_query)
             
             if not doc_type:
-                audience = self._detect_audience_heuristics(question)
+                audience = self._detect_audience_heuristics(search_query)
                 doc_type = self._auto_detect_doc_type(audience)
             
+            # 2. Retrieve
             retrieved_docs = await self.retriever.aretrieve(
                 search_query,
                 k=self.config["max_retrieved_docs"],
@@ -248,54 +251,54 @@ class UniversityRAG:
                 yield "Tôi không tìm thấy thông tin liên quan trong các quy định hiện có."
                 return
             
+            # 3. Stream Generation
             max_docs = self.config.get("max_response_docs", Config.MAX_RESPONSE_DOCS)
             ranked_docs = retrieved_docs[:max_docs]
-            
-            conv_history = self.memory.get_context_string(include_last_n=2)
             
             async for chunk in self.response_generator.astream_generate(
                 query=question,
                 documents=ranked_docs,
-                conversation_history=conv_history
+                conversation_history=self.memory.get_context_string(include_last_n=2)
             ):
                 yield chunk
                 
         except Exception as e:
             logger.error(f"Streaming Query failed: {e}", exc_info=True)
-            yield f"Xin lỗi, có lỗi hệ thống xảy ra trong khi tạo luồng phản hồi: {str(e)}"
+            yield f"\n[Lỗi hệ thống trong khi tạo phản hồi: {str(e)}]"
     
     def _preprocess_query(self, query: str) -> str:
-        """Preprocess user query to expand common university abbreviations.
-        
-        Args:
-            query: User's original query
-            
-        Returns:
-            Preprocessed query with expanded terms
-        """
+        """Expand common abbreviations to improve search recall."""
         processed = query
-        # Use word boundaries to avoid partial matching
         for abbr, expansion in Config.ABBREVIATIONS.items():
-            pattern = rf"\b{abbr}\b"
-            processed = re.sub(pattern, expansion, processed, flags=re.IGNORECASE)
-        
+            processed = re.sub(rf"\b{abbr}\b", expansion, processed, flags=re.IGNORECASE)
         return processed
 
-    def _clean_page_headers(self, content: str) -> str:
-        """Remove page headers from markdown content
-        
-        Args:
-            content: Document content
+    def _should_rewrite_query(self, query: str, history: str) -> bool:
+        """Heuristic to decide if a query needs LLM rewriting."""
+        if not history:
+            return False
             
-        Returns:
-            Cleaned content
-        """
-        cleaned_content = re.sub(Config.PAGE_HEADER_PATTERN, '', content, flags=re.MULTILINE)
-        cleaned_content = re.sub(Config.PAGE_INFO_PATTERN, '', cleaned_content, flags=re.MULTILINE)
-        return cleaned_content
-    
+        # If it's short, it likely needs context (e.g. "Cái đó là gì?", "Điều kiện thế nào?")
+        word_count = len(query.split())
+        if word_count < 5:
+            return True
+            
+        # If it contains context-dependent pronouns (Vietnamese)
+        context_words = ["đó", "này", "kia", "ấy", "họ", "nó", "thế nào", "bao nhiêu", "ai", "đâu"]
+        query_lower = query.lower()
+        if any(rf"\b{word}\b" in query_lower for word in context_words):
+            return True
+            
+        # If it's long and has specific keywords, it's likely standalone
+        standalone_keywords = ["quy định", "đăng ký", "học phần", "tín chỉ", "hồ sơ", "thời hạn"]
+        if word_count > 10 and any(kw in query_lower for kw in standalone_keywords):
+            return False
+            
+        # Default: rewrite if in doubt but we have history
+        return True
+
     def _detect_audience_heuristics(self, text: str) -> str:
-        """Heuristic-based audience detection moved from QueryAnalyzer."""
+        """Basic heuristic analysis to detect target audience from query text."""
         text = text.lower()
         if any(w in text for w in ["sinh viên", "sv", "chính quy", "đại học"]):
             return "sinh_vien_chinh_quy"
@@ -303,42 +306,18 @@ class UniversityRAG:
             return "hoc_vien_cao_hoc"
         if any(w in text for w in ["nghiên cứu sinh", "ncs", "tiến sĩ"]):
             return "nghien_cuu_sinh"
-        return "sinh_vien_chinh_quy" # Default to undergraduate
+        return "sinh_vien_chinh_quy" # Default fallback
     
-    def _detect_audience_heuristics(self, text: str) -> str:
-        """Heuristic-based audience detection moved from QueryAnalyzer."""
-        text = text.lower()
-        if any(w in text for w in ["sinh viên", "sv", "chính quy", "đại học"]):
-            return "sinh_vien_chinh_quy"
-        if any(w in text for w in ["cao học", "thạc sĩ", "học viên"]):
-            return "hoc_vien_cao_hoc"
-        if any(w in text for w in ["nghiên cứu sinh", "ncs", "tiến sĩ"]):
-            return "nghien_cuu_sinh"
-        return "sinh_vien_chinh_quy" # Default to undergraduate
-    
-    def _auto_detect_doc_type(self, target_audience) -> Optional[str]:
-        """Auto-detect doc_type from target audience.
-
-        The LLM may return target_audience as a list instead of a plain string,
-        so we normalise it first.  We also map common Vietnamese audience phrases
-        to the canonical keys used in AUDIENCE_MAPPING.
-
-        Args:
-            target_audience: Target audience identifier (str or list).
-
-        Returns:
-            Document type or None.
-        """
-        # Unwrap list → take the first element
+    def _auto_detect_doc_type(self, target_audience: Any) -> Optional[str]:
+        """Map target audience keywords to internal document category IDs (e.g., DTDH, DTSDH)."""
+        # Handle cases where LLM or caller might pass a list
         if isinstance(target_audience, list):
             target_audience = target_audience[0] if target_audience else ""
+        
+        target_audience = str(target_audience).strip().lower()
 
-        # Normalise to str just in case
-        if not isinstance(target_audience, str):
-            target_audience = str(target_audience)
-
-        # Map common plain-language values to AUDIENCE_MAPPING keys
-        _NORMALISE = {
+        # Normalization map for various ways audience might be identified
+        _MAP = {
             "sinh viên": "sinh_vien_chinh_quy",
             "sinh_vien": "sinh_vien_chinh_quy",
             "undergraduate": "sinh_vien_chinh_quy",
@@ -349,84 +328,6 @@ class UniversityRAG:
             "tiến sĩ": "nghien_cuu_sinh",
             "phd": "nghien_cuu_sinh",
         }
-        normalised = _NORMALISE.get(target_audience.strip().lower(), target_audience)
-
-        return Config.AUDIENCE_MAPPING.get(normalised)
-    
-    def chat_loop(self) -> None:
-        """Interactive chat loop for user interaction"""
-        print("=" * 70)
-        print("CHATBOT QUY ĐỊNH")
-        print("=" * 70)
-        print("\nCác lệnh có sẵn:")
-        print("  - 'exit'/'quit': Thoát ứng dụng")
-        print("  - 'clear': Xóa lịch sử hội thoại")
-        print("  - 'history': Xem lịch sử hội thoại")
-        print()
         
-        current_filter = {"doc_type": None, "regulation_type": None}
-        
-        while True:
-            try:
-                user_input = input("\nBạn: ").strip()
-                
-                if user_input.lower() in ["exit", "quit"]:
-                    print("\nCảm ơn bạn đã sử dụng chatbot!")
-                    break
-                
-                if user_input.lower() == "clear":
-                    self.memory.clear()
-                    print("Đã xóa lịch sử hội thoại")
-                    continue
-                
-                if user_input.lower() == "history":
-                    self._show_history()
-                    continue
-                
-                if not user_input:
-                    continue
-                
-                # Use a small helper to run async code in sync loop
-                import asyncio
-                async def _run():
-                    return await self.aquery(
-                        user_input,
-                        doc_type=current_filter["doc_type"],
-                        regulation_type=current_filter["regulation_type"]
-                    )
-                answer = asyncio.run(_run())
-                print(f"\nBot:\n{answer}")
-                
-            except KeyboardInterrupt:
-                print("\n\nĐã dừng chatbot.")
-                break
-            except Exception as e:
-                logger.error(f"Chat loop error: {e}", exc_info=True)
-                print(f"\nLỗi: {e}. Vui lòng thử lại.")
-    
-    def _show_history(self) -> None:
-        """Display conversation history"""
-        if not self.memory.history:
-            print("Chưa có lịch sử hội thoại")
-        else:
-            print("\n" + "=" * 60)
-            print("LỊCH SỬ HỘI THOẠI")
-            print("=" * 60)
-            for i, turn in enumerate(self.memory.history, 1):
-                print(f"\n{i}. Câu hỏi: {turn['question']}")
-                preview = turn['answer'][:200] + "..." if len(turn['answer']) > 200 else turn['answer']
-                print(f"   Trả lời: {preview}")
-            print("=" * 60)
-
-
-def main() -> None:
-    """Main entry point for the application"""
-    loader = RegulationDocumentLoader(base_path=Config.BASE_PATH)
-    rag = UniversityRAG()
-    documents = loader.load_documents()
-    rag.build_vectorstore(documents, force_rebuild=False)
-    rag.chat_loop()
-
-
-if __name__ == "__main__":
-    main()
+        canonical_key = _MAP.get(target_audience, target_audience)
+        return Config.AUDIENCE_MAPPING.get(canonical_key)

@@ -1,43 +1,43 @@
-"""Centralized configuration module"""
+"""Centralized configuration module for University Academic Regulations RAG"""
 import os
-from typing import Dict
+from typing import Dict, List, Tuple
 
 class Config:
-    """Application configuration"""
+    """Application configuration organized by component"""
 
-    # Vector Store Settings
+    # --- Vector Store Settings ---
     DB_PATH = os.environ.get("DB_PATH", "vector_db")
     EMBEDDING_MODEL = os.environ.get("EMBEDDING_MODEL", "BAAI/bge-m3")
     EMBEDDING_KWARGS = {"hnsw:space": "cosine"}
     
-    # Re-ranker Settings
-    RERANKER_MODEL = os.environ.get("RERANKER_MODEL", "BAAI/bge-reranker-v2-m3")
+    # --- Retrieval & Re-ranking Settings ---
     USE_RERANKER = True
-    TOP_K_RERANK = 12  # Reduced from 20 to speed up re-ranking
-
-    # LLM Settings — cloud models require: docker exec -it ollama ollama signin
+    RERANKER_MODEL = os.environ.get("RERANKER_MODEL", "BAAI/bge-reranker-v2-m3")
+    TOP_K_RERANK = 2   # Candidates for re-ranking (reduced for performance)
+    MAX_RETRIEVED_DOCS = 4
+    SIMILARITY_THRESHOLD = 0.2
+    
+    # --- LLM Settings ---
+    # Cloud models might require: docker exec -it ollama ollama signin
     LLM_MODEL = os.environ.get("LLM_MODEL", "deepseek-v3.1:671b-cloud")
     LLM_TEMPERATURE = float(os.environ.get("LLM_TEMPERATURE", "0.1"))
     OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
-
-    MAX_RETRIEVED_DOCS = 10
+    
+    # --- Context & Response Settings ---
     MAX_CONTEXT_LENGTH = 8000
-    SIMILARITY_THRESHOLD = 0.2
+    MAX_RESPONSE_DOCS = 2    # Documents to include in LLM prompt
     MAX_CHUNKS_PER_FILE = 1  # Strictly 1 chunk per file to avoid duplicates
-    MAX_RESPONSE_DOCS = 4    # Reduced from 7 to improve LLM processing speed
     
-    CHUNK_SIZE = 1000
-    CHUNK_OVERLAP = 200
-    
-    
-    # Memory Settings
+    # --- Memory & Stability ---
     MAX_HISTORY = 5
     CONFIDENCE_THRESHOLD = 0.35
     
-    # Document Loading Settings
+    # --- Document Processing ---
     BASE_PATH = "md"
+    CHUNK_SIZE = 1000
+    CHUNK_OVERLAP = 200
     
-    # Text Splitting Separators
+    # Text Splitting Separators (ordered by priority)
     SEPARATORS = [
         "\n\n",        # Paragraph breaks
         "\n#",         # Markdown headers
@@ -50,7 +50,7 @@ class Config:
         " ",           # Words
     ]
     
-    # Regex Patterns
+    # Regex Patterns for Cleaning
     PAGE_HEADER_PATTERN = r'^## Page \d+.*$\n?'
     PAGE_INFO_PATTERN = r'^#+\s.*(?:page|Page|PAGE).*$\n?'
     DATE_PATTERNS = [
@@ -58,16 +58,16 @@ class Config:
         r"(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})",
     ]
 
+    # --- Domain-specific Mappings ---
     
-    # Audience Mapping
+    # Maps internal audience IDs to university acronyms
     AUDIENCE_MAPPING = {
-        "sinh_vien_chinh_quy": "DTDH",
-        "hoc_vien_cao_hoc": "DTSDH",
+        "sinh_vien_chinh_quy": "DTDH", # Đào tạo Đại học
+        "hoc_vien_cao_hoc": "DTSDH",  # Đào tạo Sau đại học
         "nghien_cuu_sinh": "DTSDH",
     }
 
-    
-    # Abbreviation Mapping
+    # Common university abbreviations for query expansion
     ABBREVIATIONS = {
         "sv": "sinh viên",
         "tc": "tín chỉ",
@@ -81,7 +81,7 @@ class Config:
     }
     
     @classmethod
-    def get_markdown_headers(cls) -> list:
+    def get_markdown_headers(cls) -> List[Tuple[str, str]]:
         """Get markdown headers for splitting"""
         return [
             ("#", "Header 1"),
@@ -92,11 +92,12 @@ class Config:
     
     @classmethod
     def as_dict(cls) -> Dict:
-        """Convert config to dictionary"""
+        """Convert runtime configuration to dictionary for system initialization"""
         return {
             "db_path": cls.DB_PATH,
             "embedding_model": cls.EMBEDDING_MODEL,
             "llm_model": cls.LLM_MODEL,
+            "llm_temperature": cls.LLM_TEMPERATURE,
             "chunk_size": cls.CHUNK_SIZE,
             "chunk_overlap": cls.CHUNK_OVERLAP,
             "max_history": cls.MAX_HISTORY,
@@ -104,4 +105,5 @@ class Config:
             "max_retrieved_docs": cls.MAX_RETRIEVED_DOCS,
             "max_context_length": cls.MAX_CONTEXT_LENGTH,
             "ollama_base_url": cls.OLLAMA_BASE_URL,
+            "max_response_docs": cls.MAX_RESPONSE_DOCS,
         }

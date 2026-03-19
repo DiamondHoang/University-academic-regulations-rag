@@ -1,96 +1,73 @@
-# University Academic Regulations RAG
+# HCMUT Academic Regulations Chatbot
 
-**Retrieval-Augmented Question Answering System for University Policies**
+**An intelligent RAG system for navigating academic policies at Ho Chi Minh City University of Technology (HCMUT).**
 
-This project implements a high-performance **Retrieval-Augmented Generation (RAG)** system built to provide accurate, grounded answers regarding university academic regulations (quy định học vụ). 
-
----
-
-## Key Features
-
-- **Optimized Retrieval**: Uses BGE-M3 for semantic search with threaded re-ranking for maximum speed and accuracy.
-- **Context-Aware Generation**: Responses are strictly grounded in official documents to ensure reliability.
-- **High Performance**: 
-  - **Threaded Re-ranking**: CPU-intensive re-ranking runs in parallel to keep the server responsive.
-  - **Fast Retrieval**: Optimized candidate selection to reduce latency.
-- **Vietnamese Language Support**: Tailored for Vietnamese academic terminology and document structures.
-- **Modern Web Interface**: Intuitive and responsive chat UI.
-- **CI/CD Ready**: Containerized with Docker and GitHub Actions for automated deployment.
+Experience it now at: [https://regulationchatbot-gxfrfxffdufyh6e6.eastasia-01.azurewebsites.net](https://regulationchatbot-gxfrfxffdufyh6e6.eastasia-01.azurewebsites.net)
 
 ---
 
-## Architecture
+## Introduction
 
-The system follows a modular RAG architecture:
+Navigating complex academic regulations at HCMUT has never been easier. This product is not just a standard keyword search tool; it is a **professional AI assistant** that deeply understands official university documents to provide accurate, grounded, and clearly cited answers for students and faculty.
+
+### Key Highlights:
+- **Follow-up Question Support**: Chat naturally as you would with a human. If you ask "What are the scholarship requirements?" followed by "What about undergraduate students?", the chatbot understands the context of the first question to provide a precise follow-up answer.
+- **Accurate Citations**: Every answer includes source tags like [1], [2]..., referencing official documents directly.
+- **Recency Awareness**: The system automatically prioritizes the most recently issued regulations, ensuring you always get the latest information.
+
+---
+
+## Core Technologies
+
+The system is built on a modern RAG pipeline:
+
+- **LLM**: Powered by DeepSeek for advanced reasoning and natural language processing.
+- **Embedding & Retrieval**: Utilizes BGE-M3 for deep semantic understanding, going beyond simple keyword matching.
+- **Re-ranking**: Cross-Encoder models refine search results, ensuring the most relevant context is prioritized for generation.
+- **Frontend**: A sleek, modern, and responsive chat interface.
+
+---
+
+## System Architecture
 
 ```mermaid
 graph TD
-    User([User Query]) --> Pre[Preprocessing & Abbreviations]
-    Pre --> Ret[Hybrid Retriever]
-    Ret -->|Search| VDB[(Vector DB - Chroma)]
-    VDB -->|Retrieve| Docs[Candidate Documents]
-    Docs --> RR[Async Reranker - BGE-v2-m3]
+    User([User]) --> Rewriter[Query Rewriter - Multi-turn Handler]
+    Rewriter --> Ret[Hybrid Retriever - Semantic Search]
+    Ret -->|Query| VDB[(Vector DB - Chroma)]
+    VDB -->|Extract| Docs[Official Regulations]
+    Docs --> RR[Async Reranker - Content Mapping]
     RR -->|Top-K| Context[Ranked Context]
     Context --> Gen[Response Generator - DeepSeek]
-    Gen -->|Grounded Answer| Ans[Final Response]
+    Gen -->|Cited Response| Ans[Final Answer]
     Ans --> User
 ```
 
 ---
 
-## Installation & Setup
+## Local Setup (For Developers)
 
-### 1. Prerequisite: Ollama
-1. Install [Ollama](https://ollama.com/).
-2. Pull the required models:
+To run the system locally:
+
+1. **Prerequisites**: Install [Ollama](https://ollama.com/) and pull the required models.
+2. **Install Dependencies**:
    ```bash
-   ollama pull deepseek-v3.1:671b-cloud
+   pip install -r requirements.txt
    ```
-
-### 2. Quick Start
-```bash
-# Install dependencies
-pip install -r requirements.txt
-
-# Start the server
-python server.py
-```
-Access the chat interface at `http://localhost:8000`.
-
-### 3. Docker Deployment
-```bash
-docker-compose up --build
-```
+3. **Run the Server**:
+   ```bash
+   python server.py
+   ```
+Access the interface at: `http://localhost:8000`
 
 ---
 
-## Configuration
-
-Settings can be adjusted in `config.py`:
-
-| Variable | Description | Default |
-| :--- | :--- | :--- |
-| `LLM_MODEL` | AI Model for generation | `deepseek-v3.1:671b-cloud` |
-| `TOP_K_RERANK` | Number of documents to re-rank | `12` |
-| `MAX_RESPONSE_DOCS` | Sources cited in response | `4` |
-| `DB_PATH` | Vector database storage | `vector_db` |
+## Related Documents
+- [Azure Setup Guide](AZURE_SETUP.md)
+- [System Configuration](config.py)
 
 ---
 
-## Project Structure
-
-- `server.py`: FastAPI server with async lifespan management.
-- `uni_rag.py`: RAG pipeline orchestration.
-- `retrieval/`: Search and response generation modules.
-- `loader/`: Document parsing and cleaning.
-- `md/`: Knowledge base (Markdown files).
-- `index.html`: Web chat interface.
-
----
-
-## Cloud Deployment
-
-See [AZURE_SETUP.md](AZURE_SETUP.md) for instructions on deploying to Azure.
 
 
 

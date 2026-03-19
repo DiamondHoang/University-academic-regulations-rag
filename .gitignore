@@ -13,6 +13,3 @@ vector_db/
 rag_eval_results/
 dataset.json
 test.py
-
-# Docker
-.dockerignore

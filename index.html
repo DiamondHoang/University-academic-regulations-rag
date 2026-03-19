@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Chatbot Quy Định Đại Học</title>
+  <title>HCMUT Chatbot Quy Định</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link
     href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Sora:wght@300;400;500;600&display=swap"
@@ -453,31 +453,6 @@
       line-height: 1.6;
     }
 
-    .welcome-chips {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      justify-content: center;
-      margin-top: 4px;
-    }
-
-    .chip {
-      padding: 8px 14px;
-      background: rgba(255, 255, 255, 0.04);
-      border: 1px solid var(--border);
-      border-radius: 20px;
-      font-size: 12.5px;
-      cursor: pointer;
-      transition: all var(--transition);
-      color: var(--text);
-    }
-
-    .chip:hover {
-      background: rgba(79, 142, 247, 0.1);
-      border-color: rgba(79, 142, 247, 0.4);
-      color: var(--accent);
-    }
-
     /* Loading shimmer on welcome while RAG initializes */
     #welcome.initializing h2,
     #welcome.initializing p {
@@ -571,13 +546,6 @@
       cursor: not-allowed;
     }
 
-    .input-hint {
-      font-size: 11px;
-      color: var(--muted);
-      margin-top: 8px;
-      text-align: center;
-    }
-
     @media (max-width:600px) {
       #sidebar {
         position: absolute;
@@ -597,30 +565,30 @@
     <!-- Sidebar -->
     <aside id="sidebar">
       <div class="sidebar-header">
-        <div class="brand">Uni<span>Rag</span> Chat</div>
+        <div class="brand">Chat</div>
         <button id="new-chat-btn">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
             <path d="M12 5v14M5 12h14" />
           </svg>
-          New conversation
+          Cuộc trò chuyện mới
         </button>
       </div>
-      <div class="sidebar-section-label">History</div>
+      <div class="sidebar-section-label">Lịch sử</div>
       <div id="history-list"></div>
     </aside>
 
     <!-- Main -->
     <div id="main">
       <div id="topbar">
-        <button id="toggle-sidebar" title="Toggle sidebar">
+        <button id="toggle-sidebar" title="Đóng/Mở thanh bên">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <rect x="3" y="3" width="18" height="18" rx="2" />
             <path d="M9 3v18" />
           </svg>
         </button>
-        <div id="session-title">Initializing…</div>
+        <div id="session-title">Đang khởi tạo…</div>
         <div id="topbar-actions">
-          <button class="tb-btn" id="clear-btn" style="display:none">Clear</button>
+          <button class="tb-btn" id="clear-btn" style="display:none">Xóa lịch sử</button>
         </div>
       </div>
 
@@ -632,26 +600,19 @@
         <div id="messages-wrap">
           <div id="welcome" class="initializing">
             <div class="welcome-icon">🎓</div>
-            <h2>University Regulation Assistant</h2>
-            <p>Ask anything about university regulations, policies, academic procedures, and student guidelines.</p>
-            <div class="welcome-chips">
-              <div class="chip" onclick="sendChip(this)">Điều kiện tốt nghiệp là gì?</div>
-              <div class="chip" onclick="sendChip(this)">Thủ tục xin bảo lưu học phần</div>
-              <div class="chip" onclick="sendChip(this)">Quy định về điểm thành phần</div>
-              <div class="chip" onclick="sendChip(this)">Cách tính điểm GPA</div>
-            </div>
+            <h2>Trợ lý Quy chế Học vụ HCMUT</h2>
           </div>
         </div>
         <div id="input-area">
           <div id="input-wrap">
-            <textarea id="user-input" rows="1" placeholder="Initializing RAG…" maxlength="2000" disabled></textarea>
-            <button id="send-btn" disabled title="Send">
+            <textarea id="user-input" rows="1" placeholder="Đang khởi tạo hệ thống…" maxlength="2000"
+              disabled></textarea>
+            <button id="send-btn" disabled title="Gửi">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                 <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" />
               </svg>
             </button>
           </div>
-          <div class="input-hint">Enter to send · Shift+Enter for newline</div>
         </div>
       </div>
     </div>
@@ -661,7 +622,7 @@
     const API = '';
     let currentSessionId = null;
     let sessions = {};
-    let isLoading = false;
+    const loadingSessions = new Set(); // tracks session_ids currently fetching/streaming
     let _ragReady = false;
 
     // ── DOM refs ──────────────────────────────────────────────────────────────
@@ -675,9 +636,9 @@
     // ── Utils ─────────────────────────────────────────────────────────────────
     function fmtDate(iso) {
       const d = new Date(iso), now = new Date(), diff = (now - d) / 1000;
-      if (diff < 60) return 'just now';
-      if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
-      if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+      if (diff < 60) return 'vừa xong';
+      if (diff < 3600) return Math.floor(diff / 60) + ' phút trước';
+      if (diff < 86400) return Math.floor(diff / 3600) + ' giờ trước';
       return d.toLocaleDateString('vi-VN');
     }
     function escapeHtml(s) {
@@ -697,7 +658,7 @@
         sendBtn.disabled = false;
         newChatBtn.disabled = false;
         userInput.disabled = false;
-        userInput.placeholder = 'Ask about university regulations…';
+        userInput.placeholder = 'Hỏi về quy chế học vụ HCMUT…';
         document.getElementById('welcome').classList.remove('initializing');
       } else if (errorMsg) {
         ragBanner.style.display = '';
@@ -706,15 +667,15 @@
         sendBtn.disabled = true;
         newChatBtn.disabled = true;
         userInput.disabled = true;
-        userInput.placeholder = 'RAG initialization failed.';
+        userInput.placeholder = 'Lỗi khởi tạo hệ thống.';
       } else {
         ragBanner.style.display = '';
         ragBanner.className = '';
-        ragBanner.textContent = '⏳ RAG system is initializing, please wait…';
+        ragBanner.textContent = '⏳ Hệ thống đang khởi tạo, vui lòng đợi…';
         sendBtn.disabled = true;
         newChatBtn.disabled = true;
         userInput.disabled = true;
-        userInput.placeholder = 'Initializing RAG…';
+        userInput.placeholder = 'Đang khởi tạo hệ thống…';
       }
     }
 
@@ -759,31 +720,88 @@
 
     async function selectSession(id) {
       currentSessionId = id;
+      const isLoading = loadingSessions.has(id);
+      
       const data = await apiFetch(`/sessions/${id}`);
+      // If we switched away while fetching, don't update UI with wrong data
+      if (currentSessionId !== id) return;
+      
       sessions[id] = { ...sessions[id], ...data };
       renderChat(data);
       renderHistoryList();
+      
       sessionTitle.textContent = data.title;
       clearBtn.style.display = '';
+      
+      // Update input state for the selected session
+      sendBtn.disabled = isLoading;
+      if (isLoading) {
+        addThinkingBubble();
+      } else {
+        removeThinkingBubble();
+        userInput.focus();
+      }
     }
 
     async function deleteSession(id, e) {
-      e.stopPropagation();
-      await apiFetch(`/sessions/${id}`, { method: 'DELETE' });
-      delete sessions[id];
-      if (currentSessionId === id) {
-        // Auto-create a new session after deleting current
-        currentSessionId = null;
-        await createSession();
+      if (e) {
+          e.stopPropagation();
+          e.stopImmediatePropagation();
       }
+      
+      const isCurrent = (currentSessionId === id);
+      
+      // 1. Optimistic UI: remove from local state immediately
+      delete sessions[id];
+      if (isCurrent) {
+        currentSessionId = null;
+        sessionTitle.textContent = 'Đang xoá...';
+        // Clear message wrap
+        const wrap = document.getElementById('messages-wrap');
+        Array.from(wrap.querySelectorAll('.message-row')).forEach(el => el.remove());
+        document.getElementById('welcome').style.display = '';
+        // Clear input
+        userInput.value = '';
+        userInput.style.height = 'auto';
+      }
+      
       renderHistoryList();
+
+      try {
+        // 2. Background API call
+        await apiFetch(`/sessions/${id}`, { method: 'DELETE' });
+        
+        // 3. No auto-creation after deletion - user will start fresh or create on-demand
+        if (isCurrent) {
+          // Just reset title to Ready state
+          sessionTitle.textContent = 'Trợ lý HCMUT đã sẵn sàng';
+        }
+      } catch (e) {
+        console.error('deleteSession failed:', e);
+        ragBanner.style.display = '';
+        ragBanner.className = 'error';
+        ragBanner.textContent = '❌ Lỗi khi xóa cuộc trò chuyện: ' + e.message;
+        // Reload list to recover from erroneous state
+        loadSessions();
+      }
     }
 
     async function clearHistory() {
       if (!currentSessionId) return;
-      await apiFetch(`/sessions/${currentSessionId}/history`, { method: 'DELETE' });
-      sessions[currentSessionId].messages = [];
-      renderChat({ messages: [], title: sessions[currentSessionId].title });
+      try {
+        await apiFetch(`/sessions/${currentSessionId}/history`, { method: 'DELETE' });
+        // Reset local state
+        sessions[currentSessionId].messages = [];
+        sessions[currentSessionId].title = "Cuộc trò chuyện mới";
+        sessions[currentSessionId].message_count = 0;
+        
+        // Update UI
+        sessionTitle.textContent = "Cuộc trò chuyện mới";
+        renderHistoryList();
+        renderChat({ messages: [], title: "Cuộc trò chuyện mới" });
+      } catch (e) {
+        console.error('clearHistory failed:', e);
+      }
     }
 
     // ── Render ────────────────────────────────────────────────────────────────
@@ -791,23 +809,26 @@
       const list = document.getElementById('history-list');
       const items = Object.values(sessions).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
       if (!items.length) {
-        list.innerHTML = '<div style="padding:12px 16px;font-size:12px;color:var(--muted)">No conversations yet</div>';
+        list.innerHTML = '<div style="padding:12px 16px;font-size:12px;color:var(--muted)">Chưa có hội thoại nào</div>';
         return;
       }
-      list.innerHTML = items.map(s => `
-    <div class="history-item ${s.session_id === currentSessionId ? 'active' : ''}" onclick="selectSession('${s.session_id}')">
-      <svg class="hi-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
-      <div class="hi-text">
-        <div class="hi-title">${escapeHtml(s.title)}</div>
-        <div class="hi-meta">${fmtDate(s.created_at)} · ${s.message_count ?? (s.messages?.length ?? 0)} msgs</div>
-      </div>
-      <div class="hi-actions">
-        <button class="hi-btn" title="Delete" onclick="deleteSession('${s.session_id}', event)">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>
-        </button>
-      </div>
-    </div>
-  `).join('');
+      list.innerHTML = items.map(s => {
+        const isLoading = loadingSessions.has(s.session_id);
+        return `
+          <div class="history-item ${s.session_id === currentSessionId ? 'active' : ''}" onclick="selectSession('${s.session_id}')">
+            <svg class="hi-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+            <div class="hi-text">
+              <div class="hi-title">${escapeHtml(s.title)}</div>
+              <div class="hi-meta">${isLoading ? '<span style="color:var(--accent)">Đang trả lời...</span>' : ''}</div>
+          </div>
+          <div class="hi-actions">
+            <button class="hi-btn" title="Xóa" onclick="deleteSession('${s.session_id}', event)">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
     }
 
     function renderChat(data) {
@@ -854,41 +875,62 @@
 
     // ── Send ──────────────────────────────────────────────────────────────────
     async function send(text) {
-      if (!_ragReady || isLoading) return;
-      text = text.trim();
-      if (!text) return;
-
-      if (!currentSessionId) {
-        if (_sessionCreating) await _sessionCreating;
-        if (!currentSessionId) return;
+      if (!_ragReady) return;
+      
+      const targetSessionId = currentSessionId;
+      if (!targetSessionId) {
+        // ON-DEMAND CREATION: No session yet? Create one now!
+        try {
+          const s = await apiFetch('/sessions', { method: 'POST' });
+          sessions[s.session_id] = { ...s, messages: [], message_count: 0 };
+          currentSessionId = s.session_id;
+          sessionTitle.textContent = s.title;
+          renderHistoryList();
+          // Now retry sending with the new session
+          return send(text); 
+        } catch (err) {
+          appendBubble('assistant', `⚠️ Không thể tạo cuộc trò chuyện: ${err.message}`);
+          return;
+        }
       }
 
-      isLoading = true;
-      sendBtn.disabled = true;
-      userInput.value = '';
-      userInput.style.height = 'auto';
-
-      appendBubble('user', text);
-      addThinkingBubble();
+      if (loadingSessions.has(targetSessionId)) return;
+      
+      loadingSessions.add(targetSessionId);
+      renderHistoryList();
+      
+      // Clear input and local UI if we are in the target session
+      if (currentSessionId === targetSessionId) {
+        sendBtn.disabled = true;
+        userInput.value = '';
+        userInput.style.height = 'auto';
+        appendBubble('user', text);
+        addThinkingBubble();
+      }
 
       try {
         const response = await fetch(API + '/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ session_id: currentSessionId, message: text }),
+          body: JSON.stringify({ session_id: targetSessionId, message: text }),
         });
 
         if (!response.ok) {
-           const err = await response.json().catch(() => ({}));
-           throw new Error(err.detail || `HTTP ${response.status}`);
+          const err = await response.json().catch(() => ({}));
+          throw new Error(err.detail || `HTTP ${response.status}`);
         }
 
-        removeThinkingBubble();
+        if (currentSessionId === targetSessionId) {
+          removeThinkingBubble();
+        }
 
-        // Create the assistant bubble early to update it as chunks arrive
-        const assistantRow = appendBubble('assistant', '', true);
-        const assistantBubble = assistantRow.querySelector('.bubble');
-        
+        // Create the assistant bubble in session memory and optionally in UI
+        let assistantBubble = null;
+        if (currentSessionId === targetSessionId) {
+          const assistantRow = appendBubble('assistant', '', true);
+          assistantBubble = assistantRow.querySelector('.bubble');
+        }
+
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let fullAnswer = '';
@@ -896,42 +938,53 @@
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
-          
+
           const chunk = decoder.decode(value, { stream: true });
           fullAnswer += chunk;
-          assistantBubble.textContent = fullAnswer;
-          scrollBottom();
+          
+          // Update UI only if still looking at the same session
+          if (currentSessionId === targetSessionId && assistantBubble) {
+            assistantBubble.textContent = fullAnswer;
+            scrollBottom();
+          }
         }
 
-        // Refresh session data in background
-        if (sessions[currentSessionId]) {
-          const s = sessions[currentSessionId];
+        // Refresh session data in local state
+        if (sessions[targetSessionId]) {
+          const s = sessions[targetSessionId];
           if (!s.messages) s.messages = [];
-          s.messages.push({ role: 'user', content: text });
-          s.messages.push({ role: 'assistant', content: fullAnswer });
+          s.messages.push({ role: 'user', content: text, timestamp: new Date().toISOString() });
+          s.messages.push({ role: 'assistant', content: fullAnswer, timestamp: new Date().toISOString() });
           s.message_count = s.messages.length;
-          
-          // Small delay before title refresh to ensure server updated persistence
+
+          // Background title refresh
           setTimeout(async () => {
-             try {
-                const full = await apiFetch(`/sessions/${currentSessionId}`);
-                sessions[currentSessionId].title = full.title;
-                sessionTitle.textContent = full.title;
+            try {
+              const full = await apiFetch(`/sessions/${targetSessionId}`);
+              if (sessions[targetSessionId]) {
+                sessions[targetSessionId].title = full.title;
+                if (currentSessionId === targetSessionId) {
+                  sessionTitle.textContent = full.title;
+                }
                 renderHistoryList();
-             } catch (_) {}
+              }
+            } catch (_) { }
           }, 500);
         }
       } catch (e) {
-        removeThinkingBubble();
-        appendBubble('assistant', `⚠️ Error: ${e.message}`);
+        if (currentSessionId === targetSessionId) {
+          removeThinkingBubble();
+          appendBubble('assistant', `⚠️ Lỗi: ${e.message}`);
+        }
       } finally {
-        isLoading = false;
-        sendBtn.disabled = false;
-        userInput.focus();
+        loadingSessions.delete(targetSessionId);
+        if (currentSessionId === targetSessionId) {
+          sendBtn.disabled = false;
+          userInput.focus();
+        }
+        renderHistoryList();
       }
     }
-
-    function sendChip(el) { send(el.textContent); }
 
     // ── Event bindings ────────────────────────────────────────────────────────
     newChatBtn.addEventListener('click', createSession);
@@ -955,7 +1008,7 @@
           setRagReady(true);
           // Pre-create session immediately in background (don't await — non-blocking)
           if (!currentSessionId && !_sessionCreating) {
-            _sessionCreating = createSession().finally(() => { _sessionCreating = null; });
+            // No auto-creation anymore - Wait for user to send first message
           }
           return;
         }
@@ -968,13 +1021,14 @@
     setRagReady(false);  // disable inputs until ready
 
     (async () => {
+      // 1. Initial load
       await loadSessions();
-      // Restore most recent session if exists
-      const sorted = Object.values(sessions).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-      if (sorted.length > 0) {
-        await selectSession(sorted[0].session_id);
-      }
-      // Start polling — will enable inputs and create session if needed once RAG is ready
+      
+      // 2. Set UI to ready state but don't select/create session automatically
+      sessionTitle.textContent = 'Trợ lý HCMUT đã sẵn sàng';
+      document.getElementById('welcome').style.display = '';
+      
+      // 3. Start polling to enable inputs once RAG is ready
       pollHealth();
     })();
   </script>

@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 class RegulationDocumentLoader:
-    """Load and extract metadata from regulation documents"""
+    """Loader for university regulation documents with metadata extraction and content cleaning."""
     
     def __init__(self, base_path: str = "md"):
         """Initialize loader
@@ -21,68 +21,102 @@ class RegulationDocumentLoader:
         self.base_path = Path(base_path)
     
     def extract_metadata_from_path(self, file_path: Path) -> Dict[str, str]:
-        """Extract metadata from file path structure
+        """Extract metadata from file path structure (hierarchy: Audience/Category/File).
         
         Args:
             file_path: Path to document file
             
         Returns:
-            Dictionary with extracted metadata
+            Dictionary with 'doc_type' and 'regulation_type'
         """
-        parts = file_path.relative_to(self.base_path).parts
-        filename = file_path.stem
-        
-        metadata = {
-            "file_path": str(file_path),
-            "doc_type": parts[0] if len(parts) > 0 else "unknown", # DTDH
-            "regulation_type": parts[1] if len(parts) > 1 else "unknown", # QDHV
-        }
-        
-        return metadata
+        try:
+            relative_path = file_path.relative_to(self.base_path)
+            parts = relative_path.parts
+            
+            return {
+                "file_path": str(file_path),
+                "doc_type": parts[0] if len(parts) > 0 else "unknown",
+                "regulation_type": parts[1] if len(parts) > 1 else "unknown",
+            }
+        except ValueError:
+            # Handle cases where file is outside base_path
+            return {
+                "file_path": str(file_path),
+                "doc_type": "unknown",
+                "regulation_type": "unknown",
+            }
     
     def extract_metadata_from_content(self, content: str, filename: str) -> Dict[str, str]:
+        """Extract title, issue date, and priority from document content and filename.
+        
+        Args:
+            content: Document text content
+            filename: Name of the file (without extension)
+            
+        Returns:
+            Dictionary with title, issue_date, and priority
+        """
         metadata = {"title": filename}
 
-        # OCR cleaning
+        # OCR cleanup: fix spaced-out numbers (e.g., "2 0 2 4" -> "2024")
         content = re.sub(r"(\d)\s+(\d)", r"\1\2", content)
 
-        # Extract issue date from content
+        # 1. Extract issue date from content using defined patterns
         for pattern in Config.DATE_PATTERNS:
             date_match = re.search(pattern, content, re.IGNORECASE)
             if date_match:
                 try:
                     day, month, year = date_match.groups()
                     month = month.replace(" ", "")
+                    # Normalize 2-digit years
                     if len(year) == 2:
                         year = "20" + year
                     metadata["issue_date"] = f"{year}-{month.zfill(2)}-{day.zfill(2)}"
                     break
-                except Exception:
+                except (ValueError, IndexError):
                     continue
 
-        # Fallback to filename for date if not found in content
+        # 2. Fallback: Parse date from filename patterns (e.g., HK232)
         if "issue_date" not in metadata:
-            # Look for HK year in filename (e.g., HK232 -> 2024, HK222 -> 2023)
-            hk_match = re.search(r"HK(\d{2})(\d)", filename, re.IGNORECASE)
-            if hk_match:
-                year_short, semester = hk_match.groups()
-                # Semester 1: Sep-Jan, Semester 2: Feb-Jun, Semester 3 (Summer): Jul-Aug
-                year = 2000 + int(year_short)
-                if int(semester) >= 2:
-                    year += 1
-                metadata["issue_date"] = f"{year}-01-01" # Approximation
+            metadata["issue_date"] = self._infer_date_from_filename(filename)
 
-        # Add priority based on document type
-        if any(keyword in filename.lower() for keyword in ["kết luận", "thông báo", "ket luan", "thong bao"]):
+        # 3. Determine priority based on keywords
+        high_priority_keywords = ["kết luận", "thông báo", "ket luan", "thong bao"]
+        if any(kw in filename.lower() for kw in high_priority_keywords):
             metadata["priority"] = "high"
         else:
             metadata["priority"] = "normal"
 
         return metadata
 
+    def _infer_date_from_filename(self, filename: str) -> str:
+        """Infer an approximate issue date from semester codes in filename (e.g., HK232)."""
+        hk_match = re.search(r"HK(\d{2})(\d)", filename, re.IGNORECASE)
+        if hk_match:
+            try:
+                year_short, semester = hk_match.groups()
+                year = 2000 + int(year_short)
+                # Semester 2 and 3 usually fall in the next calendar year from the academic year start
+                if int(semester) >= 2:
+                    year += 1
+                return f"{year}-01-01" # Approximation for sorting
+            except (ValueError, IndexError):
+                pass
+        return "1970-01-01" # Default fallback for sorting
+
+    def _clean_content(self, content: str) -> str:
+        """Apply various cleaning operations to the document content."""
+        # Remove page headers and metadata noise
+        content = re.sub(Config.PAGE_HEADER_PATTERN, '', content, flags=re.MULTILINE)
+        content = re.sub(Config.PAGE_INFO_PATTERN, '', content, flags=re.MULTILINE)
+        
+        # Parse HTML tables to searchable text
+        content = self._parse_html_tables(content)
+        
+        return content.strip()
+
     def _parse_html_tables(self, content: str) -> str:
-        """Parse HTML tables in markdown content and convert to Key-Value text."""
-        # Biểu thức chính quy tìm các thẻ <table>...</table>
+        """Find HTML tables in markdown and convert them to readable key-value sentences."""
         table_pattern = re.compile(r'<table.*?>.*?</table>', re.IGNORECASE | re.DOTALL)
         
         def table_replacer(match):
@@ -92,11 +126,10 @@ class RegulationDocumentLoader:
             if not table:
                 return table_html
             
-            # Xây dựng ma trận từ DOM để chứa dữ liệu un-merged
             rows = table.find_all('tr')
             if not rows: return table_html
             
-            # Tính max columns
+            # 1. Determine table dimensions
             max_cols = 0
             for row in rows:
                 cols_count = sum(int(cell.get('colspan', 1)) for cell in row.find_all(['td', 'th']))
@@ -104,47 +137,36 @@ class RegulationDocumentLoader:
             
             if max_cols == 0: return table_html
             
-            # Khởi tạo ma trận trống
+            # 2. Build de-merged matrix
             matrix = [["" for _ in range(max_cols)] for _ in range(len(rows))]
-            
-            # Lấp đầy ma trận, xử lý rowspan/colspan
             for r_idx, row in enumerate(rows):
                 c_idx = 0
                 for cell in row.find_all(['td', 'th']):
-                    # Tìm ô trống tiếp theo trên hàng hiện tại
                     while c_idx < max_cols and matrix[r_idx][c_idx] != "":
                         c_idx += 1
-                        
-                    if c_idx >= max_cols: break # Tránh lỗi index out of range
+                    if c_idx >= max_cols: break
                     
                     rowspan = int(cell.get('rowspan', 1))
                     colspan = int(cell.get('colspan', 1))
                     text_val = cell.get_text(strip=True)
                     
-                    # Điền giá trị vào ma trận cho tất cả các ô bị gộp
                     for r in range(rowspan):
                         for c in range(colspan):
                             if r_idx + r < len(rows) and c_idx + c < max_cols:
                                 matrix[r_idx + r][c_idx + c] = text_val
-                    
                     c_idx += colspan
             
-            # Xây dựng câu Key-Value từ ma trận
-            if not matrix: return table_html
-            
-            # Xác định số dòng dùng làm Header (các dòng chỉ chứa <th>)
+            # 3. Identify header rows (all cells are <th>)
             header_rows_count = 0
             for row in rows:
                 cells = row.find_all(['td', 'th'])
                 if cells and all(c.name == 'th' for c in cells):
                     header_rows_count += 1
-                else:
-                    break
-                    
-            if header_rows_count == 0:
-                header_rows_count = 1  # Mặc định dòng đầu tiên là header nếu không phân biệt được <th>
+                else: break
+            
+            if header_rows_count == 0: header_rows_count = 1
                 
-            # Xây dựng Composite Header (Gộp tiêu đề từ nhiều dòng header)
+            # 4. Build composite headers
             headers = [""] * max_cols
             for r in range(header_rows_count):
                 for c in range(max_cols):
@@ -152,81 +174,68 @@ class RegulationDocumentLoader:
                     if val and val not in headers[c]:
                         headers[c] = (headers[c] + " " + val).strip()
             
+            # 5. Build key-value representation for each data row
             table_text = []
-            
             for r_idx in range(header_rows_count, len(matrix)):
                 row_data = matrix[r_idx]
-                
-                # Bỏ qua nếu dòng data giống hệt dòng tiêu đề đầu tiên (thường do table lặp header sau sang trang)
-                if row_data == matrix[0]:
-                    continue
+                if row_data == matrix[0]: continue # Skip repeated headers
                     
                 row_parts = []
-                for i in range(len(row_data)):
-                    val = row_data[i]
+                for i, val in enumerate(row_data):
                     if val and val != "None":
                         header_val = headers[i] if i < len(headers) else f"Column {i+1}"
-                        if header_val.isdigit() or not header_val: # Bỏ qua header Vô nghĩa
+                        if header_val.isdigit() or not header_val or header_val == val:
                             row_parts.append(val)
                         else:
-                            # Tránh lặp lại: Cột A: Cột A
-                            if header_val == val:
-                                row_parts.append(val)
-                            else:
-                                row_parts.append(f"{header_val}: {val}")
+                            row_parts.append(f"{header_val}: {val}")
                 
                 if row_parts:
-                    # Dùng set (lưu thứ tự qua dict) để loại bỏ các Key-Value trùng lặp liền kề sinh ra do gộp ô
+                    # Deduplicate adjacent identical parts (caused by cell merging)
                     unique_parts = list(dict.fromkeys(row_parts))
                     table_text.append(" - ".join(unique_parts))
             
-            if not table_text:
-                return table_html
-                
-            return "\n\n" + "\n".join(table_text) + "\n\n"
+            return "\n\n" + "\n".join(table_text) + "\n\n" if table_text else table_html
             
         return table_pattern.sub(table_replacer, content)
     
     def load_documents(self) -> List[Document]:
-        """Load documents and convert HTML tables to text
+        """Load all markdown documents from base_path, clean them, and extract metadata.
 
         Returns:
-            List of Documents
+            List of LangChain Document objects.
         """
         documents: List[Document] = []
+
+        if not self.base_path.exists():
+            logger.error(f"Base path does not exist: {self.base_path}")
+            return []
 
         for md_file in self.base_path.rglob("*.md"):
             try:
                 with open(md_file, "r", encoding="utf-8") as f:
-                    content = f.read()
+                    raw_content = f.read()
 
-                # Parse HTML tables to Key-Value text
-                content = self._parse_html_tables(content)
+                # Clean and transform content
+                cleaned_content = self._clean_content(raw_content)
 
+                # Build metadata from path and content
                 metadata = self.extract_metadata_from_path(md_file)
                 content_metadata = self.extract_metadata_from_content(
-                    content, md_file.stem
+                    cleaned_content, md_file.stem
                 )
                 metadata.update(content_metadata)
+                metadata["content_type"] = "markdown"
 
                 documents.append(
                     Document(
-                        page_content=content.strip(),
-                        metadata={
-                            **metadata,
-                            "content_type": "markdown"
-                        }
+                        page_content=cleaned_content,
+                        metadata=metadata
                     )
                 )
 
             except Exception as e:
-                logger.error(
-                    f"Error loading {md_file}: {e}",
-                    exc_info=True
-                )
+                logger.error(f"Error loading {md_file}: {e}", exc_info=True)
 
-        logger.info(
-            f"Loaded {len(documents)} documents from {self.base_path}"
-        )
+        logger.info(f"Successfully loaded {len(documents)} documents from {self.base_path}")
         return documents
 

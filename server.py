@@ -1,29 +1,134 @@
 import uuid
 import asyncio
-import traceback
+import logging
 from datetime import datetime
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any
 from pathlib import Path
 from contextlib import asynccontextmanager
 from concurrent.futures import ThreadPoolExecutor
-from fastapi import FastAPI, HTTPException
+
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import uvicorn
+
 from config import Config
 from loader.doc_loader import RegulationDocumentLoader
+from retrieval.response_generator import ResponseGenerator
+from langchain_huggingface import HuggingFaceEmbeddings
 from uni_rag import UniversityRAG
+
 # ─────────────────────────────────────────────────────────────────────────────
+# Setup Logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Session & Resource Management
+
+class SessionManager:
+    """Manages RAG sessions, shared resources, and lifecycle."""
+    
+    def __init__(self):
+        self.sessions: Dict[str, Dict[str, Any]] = {}
+        self.shared_rag: Optional[UniversityRAG] = None
+        self.shared_embeddings: Optional[HuggingFaceEmbeddings] = None
+        self.shared_generator: Optional[ResponseGenerator] = None
+        self.init_error: Optional[str] = None
+        self.is_initializing: bool = False
+        self.executor = ThreadPoolExecutor(max_workers=4)
+
+    async def initialize_shared_resources(self):
+        """Build the shared RAG and components once."""
+        if self.is_initializing:
+            return
+            
+        self.is_initializing = True
+        try:
+            logger.info("Starting RAG initialization...")
+            config = Config.as_dict()
+            
+            # 1. Load documents and components
+            loader = RegulationDocumentLoader(base_path=Config.BASE_PATH)
+            documents = await asyncio.to_thread(loader.load_documents)
+            
+            self.shared_embeddings = HuggingFaceEmbeddings(model_name=config["embedding_model"])
+            self.shared_generator = ResponseGenerator(config)
+
+            # 2. Build Vectorstore (Disk/CPU intensive)
+            rag = UniversityRAG(
+                embeddings=self.shared_embeddings, 
+                response_generator=self.shared_generator
+            )
+            await asyncio.to_thread(rag.build_vectorstore, documents, force_rebuild=False)
+            
+            self.shared_rag = rag
+            logger.info("RAG initialization complete.")
+        except Exception as e:
+            self.init_error = str(e)
+            logger.error(f"RAG initialization failed: {e}", exc_info=True)
+        finally:
+            self.is_initializing = False
+
+    def create_session(self) -> str:
+        """Create a new session with isolated memory but shared retrieval logic."""
+        if not self.shared_rag:
+            raise RuntimeError("RAG system is not ready.")
+            
+        session_id = str(uuid.uuid4())
+        
+        # Create a session-specific RAG instance (shares vectorstore/retriever)
+        session_rag = UniversityRAG(
+            session_id=session_id,
+            embeddings=self.shared_embeddings,
+            response_generator=self.shared_generator
+        )
+        # Link to shared heavy components
+        session_rag.vectorstore = self.shared_rag.vectorstore
+        session_rag.retriever = self.shared_rag.retriever
+        session_rag.all_chunks = self.shared_rag.all_chunks
+        
+        self.sessions[session_id] = {
+            "rag": session_rag,
+            "title": "Cuộc trò chuyện mới",
+            "messages": [],
+            "created_at": datetime.utcnow().isoformat(),
+        }
+        return session_id
+
+    def get_session(self, session_id: str) -> Dict[str, Any]:
+        if session_id not in self.sessions:
+            raise HTTPException(status_code=404, detail="Session not found")
+        return self.sessions[session_id]
+
+    def delete_session(self, session_id: str):
+        if session_id in self.sessions:
+            # Clean up memory persistence
+            rag = self.sessions[session_id]["rag"]
+            try:
+                if hasattr(rag.memory, 'persist_file') and rag.memory.persist_file.exists():
+                    rag.memory.persist_file.unlink()
+            except Exception as e:
+                logger.error(f"Failed to delete history file for {session_id}: {e}")
+            
+            del self.sessions[session_id]
+
+    def shutdown(self):
+        self.executor.shutdown(wait=False)
+
+# Global Manager Instance
+manager = SessionManager()
+
+# ─────────────────────────────────────────────────────────────────────────────
+# FastAPI Setup
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Lifespan event handler for FastAPI."""
-    # Run RAG init as a background task in the main event loop
-    asyncio.create_task(_build_shared_rag())
+    # Initialize RAG in background
+    asyncio.create_task(manager.initialize_shared_resources())
     yield
-    # Shutdown
-    _executor.shutdown(wait=False)
+    manager.shutdown()
 
 app = FastAPI(title="University Regulation Chatbot", lifespan=lifespan)
 
@@ -34,56 +139,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Thread pool — keeps async event loop free while RAG runs
-_executor = ThreadPoolExecutor(max_workers=4)
+# ─────────────────────────────────────────────────────────────────────────────
+# Pydantic Models
 
-# In-memory session store
-sessions: Dict[str, dict] = {}
-
-# Shared RAG (vectorstore built once, shared across sessions) 
-_shared_rag: Optional[UniversityRAG] = None
-_rag_error: Optional[str] = None
-
-
-async def _build_shared_rag():
-    """Build the shared RAG — runs as an async task on startup."""
-    global _shared_rag, _rag_error
-    try:
-        # 1. Disk/CPU intensive loading in a thread
-        loader = RegulationDocumentLoader(base_path=Config.BASE_PATH)
-        documents = await asyncio.to_thread(loader.load_documents)
-        
-        # 2. Create RAG instance in the MAIN LOOP (ensures async components capture correct loop)
-        rag = UniversityRAG()
-        
-        # 3. Vectorstore building in a thread
-        await asyncio.to_thread(rag.build_vectorstore, documents, force_rebuild=False)
-        
-        _shared_rag = rag
-        print("RAG initialization complete.")
-    except Exception as e:
-        _rag_error = str(e)
-        print(f"RAG initialization failed: {e}")
-        traceback.print_exc()
-
-
-def _make_session_rag() -> UniversityRAG:
-    """New RAG instance sharing the already-built vectorstore/retriever."""
-    if _shared_rag is None:
-         # Fallback just in case, though it should be initialized by now
-         _build_shared_rag()
-         
-    base = _shared_rag
-    session_rag = UniversityRAG()
-    session_rag.vectorstore = base.vectorstore
-    session_rag.retriever  = base.retriever
-    session_rag.all_chunks = base.all_chunks
-    return session_rag
-
-
-# Pydantic models
-
-class NewSessionResponse(BaseModel):
+class SessionResponse(BaseModel):
     session_id: str
     title: str
     created_at: str
@@ -93,10 +152,6 @@ class ChatRequest(BaseModel):
     message: str
     doc_type: Optional[str] = None
     regulation_type: Optional[str] = None
-
-class ChatResponse(BaseModel):
-    answer: str
-    session_id: str
 
 class SessionSummary(BaseModel):
     session_id: str
@@ -116,43 +171,34 @@ class SessionDetail(BaseModel):
     created_at: str
     messages: List[MessageItem]
 
-
-
-
-# Health / debug 
+# ─────────────────────────────────────────────────────────────────────────────
+# Routes
 
 @app.get("/health")
 async def health():
-    """Use this to check if RAG finished loading before sending messages."""
-    if _rag_error:
-        return JSONResponse(status_code=500, content={"status": "error", "detail": _rag_error})
-    if _shared_rag is None:
-        # Return 200 instead of 503 so Azure warmup probes don't fail during initialization
-        return JSONResponse(status_code=200, content={"status": "loading", "detail": "RAG is still initializing..."})
+    if manager.init_error:
+        return JSONResponse(status_code=500, content={"status": "error", "detail": manager.init_error})
+    if not manager.shared_rag:
+        return {"status": "loading", "detail": "RAG is still initializing..."}
     return {"status": "ok", "vectorstore": "ready"}
 
-
-# Session routes 
-
-@app.post("/sessions", response_model=NewSessionResponse)
+@app.post("/sessions", response_model=SessionResponse)
 async def create_session():
-    if _shared_rag is None:
-        raise HTTPException(status_code=503, detail="RAG is still initializing. Check /health and retry.")
-    session_id = str(uuid.uuid4())
-    now = datetime.utcnow().isoformat()
-    sessions[session_id] = {
-        "rag": _make_session_rag(),
-        "title": "New conversation",
-        "messages": [],
-        "created_at": now,
-    }
-    return NewSessionResponse(session_id=session_id, title="New conversation", created_at=now)
-
+    try:
+        session_id = manager.create_session()
+        data = manager.get_session(session_id)
+        return SessionResponse(
+            session_id=session_id, 
+            title=data["title"], 
+            created_at=data["created_at"]
+        )
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e))
 
 @app.get("/sessions", response_model=List[SessionSummary])
 async def list_sessions():
     result = []
-    for sid, data in sessions.items():
+    for sid, data in manager.sessions.items():
         msgs = data["messages"]
         last = msgs[-1]["content"][:80] if msgs else None
         result.append(SessionSummary(
@@ -165,12 +211,9 @@ async def list_sessions():
     result.sort(key=lambda s: s.created_at, reverse=True)
     return result
 
-
 @app.get("/sessions/{session_id}", response_model=SessionDetail)
 async def get_session(session_id: str):
-    if session_id not in sessions:
-        raise HTTPException(status_code=404, detail="Session not found")
-    data = sessions[session_id]
+    data = manager.get_session(session_id)
     return SessionDetail(
         session_id=session_id,
         title=data["title"],
@@ -178,49 +221,44 @@ async def get_session(session_id: str):
         messages=[MessageItem(**m) for m in data["messages"]],
     )
 
-
 @app.delete("/sessions/{session_id}")
 async def delete_session(session_id: str):
-    if session_id not in sessions:
-        raise HTTPException(status_code=404, detail="Session not found")
-    del sessions[session_id]
+    manager.delete_session(session_id)
     return {"status": "deleted"}
-
 
 @app.delete("/sessions/{session_id}/history")
 async def clear_history(session_id: str):
-    if session_id not in sessions:
-        raise HTTPException(status_code=404, detail="Session not found")
-    sessions[session_id]["messages"] = []
-    sessions[session_id]["rag"].memory.clear()
+    data = manager.get_session(session_id)
+    data["messages"] = []
+    data["title"] = "Cuộc trò chuyện mới"
+    data["rag"].memory.clear()
     return {"status": "cleared"}
 
-
 @app.patch("/sessions/{session_id}/title")
-async def rename_session(session_id: str, body: dict):
-    if session_id not in sessions:
-        raise HTTPException(status_code=404, detail="Session not found")
-    sessions[session_id]["title"] = body.get("title", "Untitled")
+async def rename_session(session_id: str, request: Request):
+    body = await request.json()
+    data = manager.get_session(session_id)
+    data["title"] = body.get("title", "Untitled")
     return {"status": "ok"}
-
-
-# Chat route 
 
 @app.post("/chat")
 async def chat(req: ChatRequest):
-    if _shared_rag is None:
-        raise HTTPException(status_code=503, detail="RAG is still initializing. Check /health and retry in a moment.")
-    if req.session_id not in sessions:
-        raise HTTPException(status_code=404, detail="Session not found. Create a session first.")
-
-    data = sessions[req.session_id]
+    if not manager.shared_rag:
+        raise HTTPException(status_code=503, detail="RAG system is still initializing.")
+    
+    data = manager.get_session(req.session_id)
     rag: UniversityRAG = data["rag"]
-    now = datetime.utcnow().isoformat()
+    
+    # Track user message
+    data["messages"].append({
+        "role": "user", 
+        "content": req.message, 
+        "timestamp": datetime.utcnow().isoformat()
+    })
 
-    data["messages"].append({"role": "user", "content": req.message, "timestamp": now})
-
+    # Auto-generate title after first message
     if len(data["messages"]) == 1:
-        data["title"] = req.message[:60] + ("…" if len(req.message) > 60 else "")
+        data["title"] = req.message[:50] + ("..." if len(req.message) > 50 else "")
 
     async def _streamer():
         full_answer = ""
@@ -233,21 +271,20 @@ async def chat(req: ChatRequest):
                 full_answer += chunk
                 yield chunk
             
-            # Record the full answer in session history after stream ends
+            # Record assistant message
             data["messages"].append({
                 "role": "assistant",
                 "content": full_answer,
                 "timestamp": datetime.utcnow().isoformat(),
             })
         except Exception as e:
-            traceback.print_exc()
-            err_msg = f"\n[Lỗi: {str(e)}]"
-            yield err_msg
+            logger.error(f"Streaming error: {e}")
+            yield f"\n[Lỗi hệ thống: {str(e)}]"
 
     return StreamingResponse(_streamer(), media_type="text/plain")
 
-
-# Serve frontend
+# ─────────────────────────────────────────────────────────────────────────────
+# Static Assets
 
 FRONTEND = Path(__file__).parent / "index.html"
 
