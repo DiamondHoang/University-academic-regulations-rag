@@ -400,18 +400,19 @@ class ResponseGenerator:
             LỊCH SỬ HỘI THOẠI (để tham khảo ngữ cảnh nếu cần):
             {conversation_history if conversation_history else "Chưa có lịch sử."}
 
-            QUY TẮC ƯU TIÊN THỜI GIAN:
-            - CONTEXT có thể chứa nhiều văn bản (Nguồn 1, Nguồn 2, ...).
-            - Nếu các nguồn có thông tin mâu thuẫn hoặc khác nhau về cùng một vấn đề, bạn PHẢI ưu tiên thông tin từ nguồn có **Ngày ban hành** gần đây nhất (mới nhất).
-            - Luôn coi văn bản mới hơn là văn bản cập nhật hoặc thay thế cho văn bản cũ.
+            QUY TẮC ƯU TIÊN VÀ XỬ LÝ XUNG ĐỘT (CỰC KỲ QUAN TRỌNG):
+            Các văn bản trong CONTEXT đã được sắp xếp từ MỚI NHẤT ([SOURCE_ID_1]) đến CŨ NHẤT. Bạn BẮT BUỘC phải tìm câu trả lời theo các bước sau ngặt nghèo sau:
+            - BƯỚC 1: Tìm câu trả lời trong [SOURCE_ID_1]. Nếu tìm thấy đầy đủ ý, BẮT BUỘC DỪNG LẠI, chỉ dùng DUY NHẤT [SOURCE_ID_1] để trả lời và PHỚT LỜ HOÀN TOÀN các nguồn bên dưới, kể cả khi chúng nói về cùng một chủ đề (vì chúng là văn bản cũ, đã hết hiệu lực).
+            - BƯỚC 2: CHỈ KHI [SOURCE_ID_1] hoàn toàn không có thông tin liên quan, bạn mới được phép đọc xuống [SOURCE_ID_2]. Tương tự, nếu [SOURCE_ID_2] có câu trả lời, DỪNG LẠI và không dùng [SOURCE_ID_3].
+            - Không được vi phạm thứ tự này. Tuyệt đối không lấy thông tin từ văn bản cũ gộp chung vào văn bản mới nếu chúng có điểm mâu thuẫn.
 
             QUY TẮC TRẢ LỜI:
             1. TRÍCH NGUỒN BẮT BUỘC: Cuối mỗi câu/ý phải ghi ký hiệu nguồn dưới dạng [SOURCE_ID_N]. Ví dụ: "Sinh viên đăng ký tối thiểu 12 tín chỉ [SOURCE_ID_1]."
-            2. CHỈ SỬ DỤNG NHÃN CÓ TRONG CONTEXT: Tuyệt đối không tự bịa ra nhãn hoặc dùng số thứ tự khác ngoài các nhãn [SOURCE_ID_1], [SOURCE_ID_2]... đã được cung cấp.
+            2. CHỈ SỬ DỤNG NHÃN CÓ TRONG CONTEXT: Tuyệt đối không tự bịa ra nhãn hoặc dùng số thứ tự khác.
             3. PLAIN TEXT: Không dùng format markdown như **, *, #. Chỉ dùng văn xuôi thuần túy.
             4. TRUNG THỰC: Nếu không tìm thấy thông tin trong CONTEXT, hãy nói: "Tôi không tìm thấy thông tin cụ thể về vấn đề này trong các văn bản quy định hiện có."
-            5. NGẮN GỌN: Đi thẳng vào vấn đề, không giải thích dài dòng về cách bạn chọn nguồn.
-            6. TỔNG HỢP: TUYỆT ĐỐI KHÔNG ĐƯỢC TRẢ LỜI TỔNG HỢP TỪ NHIỀU NGUỒN, CHỈ ĐƯỢC TRẢ LỜI DỰA TRÊN 1 NGUỒN DUY NHẤT VÀ ĐÚNG NHẤT.
+            5. NGẮN GỌN: Đi thẳng vào vấn đề. TUYỆT ĐỐI không giải thích chi tiết bạn đã chọn nguồn như thế nào, không liệt kê các bước làm việc.
+            6. TỔNG HỢP: TUYỆT ĐỐI KHÔNG tổng hợp nhiều nguồn có nội dung xung đột. Phải tuân thủ việc ngắt nguồn theo Quy tắc Ưu Tiên bên trên.
         """).strip()
 
         human_prompt = textwrap.dedent(f"""

@@ -1,4 +1,7 @@
 import logging
+import asyncio
+import re
+import unicodedata
 from typing import List, Optional, Dict, Any, Tuple
 from datetime import datetime
 from langchain_core.documents import Document
@@ -56,16 +59,19 @@ class VectorRetriever:
             # Skip re-ranking if the top result is already very confident (Fast-path)
             if self.reranker and len(retrieved_docs) > 1:
                 top_score = retrieved_docs[0].metadata.get("confidence_score", 0.0)
-                if top_score > 0.8:
+                if top_score > 0.75:
                     logger.info(f"High confidence ({top_score:.2f}) - Skipping re-ranking fast-path.")
                 else:
                     try:
-                        import asyncio
-                        # Prepare pairs for cross-encoder
-                        pairs = [[query, doc.page_content] for doc in retrieved_docs]
+                        # Prepare pairs for cross-encoder - Truncate content slightly to speed up inference
+                        pairs = [[query, doc.page_content[:700]] for doc in retrieved_docs]
                         
-                        # Run CPU-intensive re-ranking in a thread to keep async loop responsive
-                        scores = await asyncio.to_thread(self.reranker.predict, pairs)
+                        # Run CPU-intensive re-ranking with batching
+                        scores = await asyncio.to_thread(
+                            self.reranker.predict, 
+                            pairs, 
+                            batch_size=16
+                        )
                         
                         # Update scores in metadata
                         for i, score in enumerate(scores):
@@ -90,7 +96,6 @@ class VectorRetriever:
 
     async def _avector_only_search(self, query: str, k: int, doc_type: Optional[str], regulation_type: Optional[str]) -> List[Document]:
         """Pure vector search with metadata filtering, using real relevance scores."""
-        import asyncio
         candidate_k = int(k * 1.5)
         
         chroma_filter = {}
@@ -116,7 +121,6 @@ class VectorRetriever:
         try:
             # Vector search with relevance scores - using asyncio.to_thread
             # which automatically handles the event loop and thread pool
-            import asyncio
             scored = await asyncio.to_thread(
                 self.vectorstore.similarity_search_with_relevance_scores,
                 query, 
@@ -173,8 +177,6 @@ class VectorRetriever:
 
     def _resolve_conflicts_by_date(self, docs: List[Document]) -> List[Document]:
         """Resolve regulation conflicts by keeping only the NEWEST document per topic group."""
-        import re as _re
-        import unicodedata
 
         def _normalize_title(title: str) -> str:
             # 1. Base normalization: lowercase and NFKD to decompose accents
@@ -183,76 +185,55 @@ class VectorRetriever:
             # Remove all non-spacing marks (accents) to handle different encodings
             t = "".join([c for c in t if not unicodedata.combining(c)])
             
-            # 2. Strip leading numbers/delimiters (e.g., "184_", "474 - ")
-            t = _re.sub(r'^\s*[\d\.\-\_]+', '', t)
-            
-            # 3. Standardize common abbreviations and strip formal prefixes
+            # 2. Hardcode strong grouping for versioned regulation series 
+            # (Ensures all editions fall into the exact same bucket regardless of noisy suffixes)
             t = t.replace('hdhv', 'hoi dong hoc vu')
+            if 'hoi dong hoc vu' in t:
+                return 'hoi dong hoc vu'
+            if 'quy che dao tao' in t:
+                return 'quy che dao tao'
+                
+            # 3. Strip leading numbers/delimiters
+            t = re.sub(r'^\s*[\d\.\-\_]+', '', t)
+            
+            # 4. Standardize common abbreviations
             t = t.replace('dh&sdh', 'dai hoc va sau dai hoc')
             t = t.replace('dh sdh', 'dai hoc va sau dai hoc')
-            
-            # Strip common boilerplate prefixes that differ between versions
-            prefixes_to_strip = [
-                "thong bao ket luan tai phien hop",
-                "tb ket luan tai phien hop",
-                "ket luan tai phien hop",
-                "ket luan phien hop",
-                "thong bao ket luan",
-                "ket luan hdhv",
-                "tb ket luan",
-                "tb hdhv",
-                "quy dinh ve",
-                "quy dinh",
-                "thong bao",
-            ]
-            for pref in prefixes_to_strip:
-                if t.startswith(pref):
-                    t = t[len(pref):].strip()
-            
-            # 4. Standardize terms
             t = t.replace('tb', 'thong bao')
             t = t.replace('kl', 'ket luan')
             
-            # 5. Remove time-specific patterns ONLY at the VERY END if they are just noise,
-            # but KEEP semester IDs like HK222, HK251 as they define unique documents.
-            # Removed the aggressive stripping of HK\d{3}, hoc ky, and years.
-            
-            # 6. Remove common descriptive suffixes
-            t = t.replace('chinh thuc', '')
+            # 5. Remove common descriptive suffixes & file extensions
+            t = t.replace('.md', '')
             t = t.replace('signed', '')
             t = t.replace('phien ban hop nhat', '')
-            t = t.replace('.md', '')
             
-            # Final cleanup: remove extra spaces and punctuation
-            t = _re.sub(r'[^a-z0-9\s]', ' ', t)
-            t = _re.sub(r'\s+', ' ', t).strip()
-            
+            # Final cleanup
+            t = re.sub(r'[^a-z0-9\s]', ' ', t)
+            t = re.sub(r'\s+', ' ', t).strip()
             return t
 
-        groups: Dict[str, Tuple[Document, float]] = {}
+        groups_best_ts: Dict[str, float] = {}
 
+        # Pass 1: Find the maximum (newest) timestamp for each topic key
         for doc in docs:
             title = doc.metadata.get("title", doc.metadata.get("file_path", ""))
             key = _normalize_title(title)
             ts = self._parse_date(doc.metadata.get("issue_date"))
             
-            # Log grouping for debug
-            logger.debug(f"Title: '{title}' -> Group: '{key}' (ts={ts})")
-
-            if key not in groups:
-                groups[key] = (doc, ts)
+            if key not in groups_best_ts:
+                groups_best_ts[key] = ts
             else:
-                _, best_ts = groups[key]
-                if ts > best_ts:
-                    groups[key] = (doc, ts)
+                if ts > groups_best_ts[key]:
+                    groups_best_ts[key] = ts
 
-        seen_keys: set = set()
+        # Pass 2: Keep ALL chunks that belong to the newest edition for their topic key
         resolved: List[Document] = []
         for doc in docs:
             title = doc.metadata.get("title", doc.metadata.get("file_path", ""))
             key = _normalize_title(title)
-            if key not in seen_keys:
-                seen_keys.add(key)
-                best_doc, _ = groups[key]
-                resolved.append(best_doc)
+            ts = self._parse_date(doc.metadata.get("issue_date"))
+            
+            if ts == groups_best_ts[key]:
+                resolved.append(doc)
+                
         return resolved

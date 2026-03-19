@@ -13,8 +13,8 @@ class Config:
     # --- Retrieval & Re-ranking Settings ---
     USE_RERANKER = True
     RERANKER_MODEL = os.environ.get("RERANKER_MODEL", "BAAI/bge-reranker-v2-m3")
-    TOP_K_RERANK = 2   # Candidates for re-ranking (reduced for performance)
-    MAX_RETRIEVED_DOCS = 4
+    TOP_K_RERANK = 15   # Balanced value: enough to catch HK251 conflicts while reducing latency
+    MAX_RETRIEVED_DOCS = 10
     SIMILARITY_THRESHOLD = 0.2
     
     # --- LLM Settings ---
@@ -25,7 +25,7 @@ class Config:
     
     # --- Context & Response Settings ---
     MAX_CONTEXT_LENGTH = 8000
-    MAX_RESPONSE_DOCS = 2    # Documents to include in LLM prompt
+    MAX_RESPONSE_DOCS = 4    # Documents to include in LLM prompt
     MAX_CHUNKS_PER_FILE = 1  # Strictly 1 chunk per file to avoid duplicates
     
     # --- Memory & Stability ---
