@@ -17,7 +17,7 @@ RUN pip install --user --no-cache-dir -r requirements.txt
 # Pre-download models to cache them in the image
 COPY config.py .
 COPY scripts/download_models.py scripts/download_models.py
-RUN python scripts/download_models.py
+RUN PYTHONPATH=. python scripts/download_models.py
 
 # Stage 2: Final image
 FROM python:3.10-slim
