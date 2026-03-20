@@ -1,7 +1,7 @@
 import asyncio
 import re
 import unicodedata
-from typing import List, Optional, Dict, Any, Tuple
+from typing import List, Optional, Dict, Any
 from datetime import datetime
 from langchain_core.documents import Document
 from langchain_chroma import Chroma

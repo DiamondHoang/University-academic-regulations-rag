@@ -1,4 +1,3 @@
-import os
 from sentence_transformers import CrossEncoder
 from langchain_huggingface import HuggingFaceEmbeddings
 from config import Config

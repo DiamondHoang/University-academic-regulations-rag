@@ -1,19 +1,11 @@
 import os
 import re
 import time
-import asyncio
-from typing import List, Optional, Dict, Any, AsyncGenerator, Tuple
-
+from typing import List, Optional, Dict, Any, AsyncGenerator
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_chroma import Chroma
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_core.documents import Document
-
-try:
-    import fcntl
-except ImportError:
-    pass
-
 from config import Config
 from memory.conversation_memory import ConversationMemory
 from retrieval.vector_retriever import VectorRetriever
