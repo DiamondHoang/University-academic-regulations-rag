@@ -11,7 +11,11 @@ if [ -n "$OLLAMA_KEY" ]; then
 fi
 
 # Start the FastAPI application with optimizations for Azure
+# Use WEB_CONCURRENCY env var if provided (Azure App Service often sets this), default to 1.
+# Reducing workers saves significant RAM (1.5GB-2GB per worker for models).
+WORKERS=${WEB_CONCURRENCY:-1}
+
 # --preload: shares memory for heavy models among workers (Embedding, Reranker)
 # --timeout 600: prevents worker timeout during long LLM generations
-echo "Starting FastAPI application with 4 workers and --preload..."
-exec gunicorn server:app -w 4 -k uvicorn.workers.UvicornWorker -b 0.0.0.0:8000 --timeout 600 --preload
+echo "Starting FastAPI application with $WORKERS workers and --preload..."
+exec gunicorn server:app -w $WORKERS -k uvicorn.workers.UvicornWorker -b 0.0.0.0:8000 --timeout 600 --preload
