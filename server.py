@@ -41,20 +41,31 @@ class SessionManager:
             config = Config.as_dict()
             
             # 1. Load documents and components
+            print(f"Loading documents from {Config.BASE_PATH}...")
             loader = RegulationDocumentLoader(base_path=Config.BASE_PATH)
             documents = await asyncio.to_thread(loader.load_documents)
+            print(f"Loaded {len(documents)} documents.")
             
+            print(f"Initializing embeddings ({config['embedding_model']})...")
             self.shared_embeddings = HuggingFaceEmbeddings(model_name=config["embedding_model"])
+            print("Embeddings initialized.")
+            
+            print("Initializing response generator...")
             self.shared_generator = ResponseGenerator(config)
+            print("Response generator initialized.")
 
             # 2. Build Vectorstore (Disk/CPU intensive)
+            print("Initializing RAG core...")
             rag = UniversityRAG(
                 embeddings=self.shared_embeddings, 
                 response_generator=self.shared_generator
             )
+            print(f"Loading/Building vectorstore from {config['db_path']}...")
             await asyncio.to_thread(rag.build_vectorstore, documents, force_rebuild=False)
+            print("Vectorstore ready.")
             
             self.shared_rag = rag
+            print("RAG shared resources initialization complete.")
         except Exception as e:
             self.init_error = str(e)
         finally:
@@ -113,8 +124,10 @@ manager = SessionManager()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Initialize RAG in background
-    asyncio.create_task(manager.initialize_shared_resources())
+    # Initialize RAG and wait until finish to ensure Azure Healthcheck/Traffic is correct
+    print("Lifespan: Initializing RAG shared resources...")
+    await manager.initialize_shared_resources()
+    print("Lifespan: RAG shared resources initialized.")
     yield
     manager.shutdown()
 
