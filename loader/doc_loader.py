@@ -1,12 +1,9 @@
 import re
-import logging
 from pathlib import Path
 from typing import Dict, List
 from langchain_core.documents import Document
 from bs4 import BeautifulSoup
 from config import Config
-
-logger = logging.getLogger(__name__)
 
 
 class RegulationDocumentLoader:
@@ -207,7 +204,6 @@ class RegulationDocumentLoader:
         documents: List[Document] = []
 
         if not self.base_path.exists():
-            logger.error(f"Base path does not exist: {self.base_path}")
             return []
 
         for md_file in self.base_path.rglob("*.md"):
@@ -234,8 +230,7 @@ class RegulationDocumentLoader:
                 )
 
             except Exception as e:
-                logger.error(f"Error loading {md_file}: {e}", exc_info=True)
+                pass
 
-        logger.info(f"Successfully loaded {len(documents)} documents from {self.base_path}")
         return documents
 

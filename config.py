@@ -11,22 +11,18 @@ class Config:
     EMBEDDING_KWARGS = {"hnsw:space": "cosine"}
     
     # --- Retrieval & Re-ranking Settings ---
-    USE_RERANKER = True
+    USE_RERANKER = os.environ.get("USE_RERANKER", "True").lower() == "true"
     RERANKER_MODEL = os.environ.get("RERANKER_MODEL", "BAAI/bge-reranker-v2-m3")
-    TOP_K_RERANK = 15   # Balanced value: enough to catch HK251 conflicts while reducing latency
-    MAX_RETRIEVED_DOCS = 10
-    SIMILARITY_THRESHOLD = 0.2
+    MAX_RETRIEVED_DOCS = int(os.environ.get("MAX_RETRIEVED_DOCS", "10"))
     
-    # --- LLM Settings ---
-    # Cloud models might require: docker exec -it ollama ollama signin
-    LLM_MODEL = os.environ.get("LLM_MODEL", "deepseek-v3.1:671b-cloud")
-    LLM_TEMPERATURE = float(os.environ.get("LLM_TEMPERATURE", "0.1"))
+    # --- LLM Settings (Ollama) ---
     OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
+    OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "deepseek-v3.1:671b-cloud")
+    
+    LLM_TEMPERATURE = float(os.environ.get("LLM_TEMPERATURE", "0.1"))
     
     # --- Context & Response Settings ---
-    MAX_CONTEXT_LENGTH = 8000
-    MAX_RESPONSE_DOCS = 4    # Documents to include in LLM prompt
-    MAX_CHUNKS_PER_FILE = 1  # Strictly 1 chunk per file to avoid duplicates
+    MAX_RESPONSE_DOCS = int(os.environ.get("MAX_RESPONSE_DOCS", "3"))    # Documents to include in LLM prompt
     
     # --- Memory & Stability ---
     MAX_HISTORY = 5
@@ -96,14 +92,13 @@ class Config:
         return {
             "db_path": cls.DB_PATH,
             "embedding_model": cls.EMBEDDING_MODEL,
-            "llm_model": cls.LLM_MODEL,
+            "ollama_base_url": cls.OLLAMA_BASE_URL,
+            "ollama_model": cls.OLLAMA_MODEL,
             "llm_temperature": cls.LLM_TEMPERATURE,
             "chunk_size": cls.CHUNK_SIZE,
             "chunk_overlap": cls.CHUNK_OVERLAP,
             "max_history": cls.MAX_HISTORY,
             "confidence_threshold": cls.CONFIDENCE_THRESHOLD,
             "max_retrieved_docs": cls.MAX_RETRIEVED_DOCS,
-            "max_context_length": cls.MAX_CONTEXT_LENGTH,
-            "ollama_base_url": cls.OLLAMA_BASE_URL,
             "max_response_docs": cls.MAX_RESPONSE_DOCS,
         }

@@ -1,12 +1,10 @@
 import uuid
 import asyncio
-import logging
+import json
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 from pathlib import Path
 from contextlib import asynccontextmanager
-from concurrent.futures import ThreadPoolExecutor
-
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -18,11 +16,6 @@ from loader.doc_loader import RegulationDocumentLoader
 from retrieval.response_generator import ResponseGenerator
 from langchain_huggingface import HuggingFaceEmbeddings
 from uni_rag import UniversityRAG
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Setup Logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Session & Resource Management
@@ -37,7 +30,6 @@ class SessionManager:
         self.shared_generator: Optional[ResponseGenerator] = None
         self.init_error: Optional[str] = None
         self.is_initializing: bool = False
-        self.executor = ThreadPoolExecutor(max_workers=4)
 
     async def initialize_shared_resources(self):
         """Build the shared RAG and components once."""
@@ -46,7 +38,6 @@ class SessionManager:
             
         self.is_initializing = True
         try:
-            logger.info("Starting RAG initialization...")
             config = Config.as_dict()
             
             # 1. Load documents and components
@@ -64,10 +55,8 @@ class SessionManager:
             await asyncio.to_thread(rag.build_vectorstore, documents, force_rebuild=False)
             
             self.shared_rag = rag
-            logger.info("RAG initialization complete.")
         except Exception as e:
             self.init_error = str(e)
-            logger.error(f"RAG initialization failed: {e}", exc_info=True)
         finally:
             self.is_initializing = False
 
@@ -87,7 +76,6 @@ class SessionManager:
         # Link to shared heavy components
         session_rag.vectorstore = self.shared_rag.vectorstore
         session_rag.retriever = self.shared_rag.retriever
-        session_rag.all_chunks = self.shared_rag.all_chunks
         
         self.sessions[session_id] = {
             "rag": session_rag,
@@ -109,13 +97,13 @@ class SessionManager:
             try:
                 if hasattr(rag.memory, 'persist_file') and rag.memory.persist_file.exists():
                     rag.memory.persist_file.unlink()
-            except Exception as e:
-                logger.error(f"Failed to delete history file for {session_id}: {e}")
+            except Exception:
+                pass
             
             del self.sessions[session_id]
 
     def shutdown(self):
-        self.executor.shutdown(wait=False)
+        pass
 
 # Global Manager Instance
 manager = SessionManager()
@@ -263,13 +251,16 @@ async def chat(req: ChatRequest):
     async def _streamer():
         full_answer = ""
         try:
-            async for chunk in rag.astream_query(
+            async for chunk_dict in rag.astream_query(
                 question=req.message,
                 doc_type=req.doc_type,
                 regulation_type=req.regulation_type,
             ):
-                full_answer += chunk
-                yield chunk
+                chunk_type = chunk_dict.get("type")
+                if chunk_type == "content":
+                    full_answer += chunk_dict.get("content", "")
+                
+                yield json.dumps(chunk_dict, ensure_ascii=False) + "\n"
             
             # Record assistant message
             data["messages"].append({
@@ -278,7 +269,6 @@ async def chat(req: ChatRequest):
                 "timestamp": datetime.utcnow().isoformat(),
             })
         except Exception as e:
-            logger.error(f"Streaming error: {e}")
             yield f"\n[Lỗi hệ thống: {str(e)}]"
 
     return StreamingResponse(_streamer(), media_type="text/plain")

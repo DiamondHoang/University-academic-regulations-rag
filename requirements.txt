@@ -19,3 +19,4 @@ uvicorn[standard]
 beautifulsoup4 
 markdownify
 pandas
+rank_bm25

@@ -556,6 +556,71 @@
         box-shadow: 4px 0 24px rgba(0, 0, 0, 0.5);
       }
     }
+
+
+    /* Filters in Input Area */
+    #filter-bar {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .filter-select {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-size: 11px;
+      padding: 4px 8px;
+      border-radius: 6px;
+      outline: none;
+      font-family: var(--font-sans);
+    }
+    .filter-select:focus { border-color: var(--accent); }
+
+    /* Source citations */
+    .source-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 11px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border);
+      padding: 2px 6px;
+      border-radius: 4px;
+      margin-top: 8px;
+      cursor: pointer;
+      color: var(--muted);
+      transition: all var(--transition);
+    }
+    .source-tag:hover {
+      background: rgba(79, 142, 247, 0.1);
+      color: var(--accent);
+      border-color: var(--accent);
+    }
+    
+    .sources-container {
+      margin-top: 10px;
+      display: none;
+      padding: 10px;
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 8px;
+      border: 1px dashed var(--border);
+    }
+    .source-item {
+      margin-bottom: 8px;
+      font-size: 12px;
+    }
+    .source-title {
+      font-weight: 600;
+      color: var(--accent2);
+      margin-bottom: 2px;
+    }
+    .source-content {
+      color: #aaa;
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      font-size: 11.5px;
+    }
   </style>
 </head>
 
@@ -601,9 +666,11 @@
           <div id="welcome" class="initializing">
             <div class="welcome-icon">🎓</div>
             <h2>Trợ lý Quy chế Học vụ HCMUT</h2>
+            <p style="margin-top:8px">Tra cứu nhanh chóng các quy định học vụ, học phí và hướng dẫn đào tạo.</p>
           </div>
         </div>
         <div id="input-area">
+
           <div id="input-wrap">
             <textarea id="user-input" rows="1" placeholder="Đang khởi tạo hệ thống…" maxlength="2000"
               disabled></textarea>
@@ -616,6 +683,8 @@
         </div>
       </div>
     </div>
+
+  </div>
 
   </div>
   <script>
@@ -700,7 +769,7 @@
         list.forEach(s => { sessions[s.session_id] = s; });
         renderHistoryList();
       } catch (e) {
-        console.error('loadSessions failed:', e);
+        // console.error('loadSessions failed:', e);
       }
     }
 
@@ -711,7 +780,7 @@
         renderHistoryList();
         await selectSession(s.session_id);
       } catch (e) {
-        console.error('[createSession] failed:', e);
+        // console.error('[createSession] failed:', e);
         ragBanner.style.display = '';
         ragBanner.className = 'error';
         ragBanner.textContent = '❌ Could not create session: ' + e.message;
@@ -777,7 +846,6 @@
           sessionTitle.textContent = 'Trợ lý HCMUT đã sẵn sàng';
         }
       } catch (e) {
-        console.error('deleteSession failed:', e);
         ragBanner.style.display = '';
         ragBanner.className = 'error';
         ragBanner.textContent = '❌ Lỗi khi xóa cuộc trò chuyện: ' + e.message;
@@ -800,7 +868,7 @@
         renderHistoryList();
         renderChat({ messages: [], title: "Cuộc trò chuyện mới" });
       } catch (e) {
-        console.error('clearHistory failed:', e);
+        //
       }
     }
 
@@ -861,13 +929,35 @@
 
     function addThinkingBubble() {
       const wrap = document.getElementById('messages-wrap');
+      if (document.getElementById('thinking-bubble')) return;
       const row = document.createElement('div');
-      row.className = 'message-row'; row.id = 'thinking-row';
-      row.innerHTML = `<div class="bubble bot thinking"><span class="typing-dots"><span></span><span></span><span></span></span></div>`;
+      row.id = 'thinking-bubble';
+      row.className = 'message-row bot';
+      const bubble = document.createElement('div');
+      bubble.className = 'bubble bot thinking';
+      bubble.innerHTML = '<div class="typing-dots"><span></span><span></span><span></span></div> Đang xử lý...';
+      row.appendChild(bubble);
       wrap.appendChild(row);
       scrollBottom();
     }
-    function removeThinkingBubble() { document.getElementById('thinking-row')?.remove(); }
+
+    function removeThinkingBubble() {
+      const el = document.getElementById('thinking-bubble');
+      if (el) el.remove();
+    }
+
+
+    function renderSources(sources, container) {
+      if (!sources || !sources.length) return;
+      container.style.display = 'block';
+      container.innerHTML = sources.map((s, i) => `
+        <div class="source-item">
+          <div class="source-title">#${i + 1} ${escapeHtml(s.metadata.source || 'Tài liệu')}</div>
+          <div class="source-content">${escapeHtml(s.content)}</div>
+        </div>
+      `).join('');
+    }
+
     function scrollBottom() {
       const wrap = document.getElementById('messages-wrap');
       wrap.scrollTop = wrap.scrollHeight;
@@ -875,97 +965,110 @@
 
     // ── Send ──────────────────────────────────────────────────────────────────
     async function send(text) {
-      if (!_ragReady) return;
+      if (!_ragReady || !text.trim()) return;
       
-      const targetSessionId = currentSessionId;
+      let targetSessionId = currentSessionId;
+      
+      sendBtn.disabled = true;
+      userInput.value = '';
+      userInput.style.height = 'auto';
+      appendBubble('user', text);
+      addThinkingBubble();
+
       if (!targetSessionId) {
-        // ON-DEMAND CREATION: No session yet? Create one now!
         try {
           const s = await apiFetch('/sessions', { method: 'POST' });
           sessions[s.session_id] = { ...s, messages: [], message_count: 0 };
           currentSessionId = s.session_id;
+          targetSessionId = s.session_id;
           sessionTitle.textContent = s.title;
           renderHistoryList();
-          // Now retry sending with the new session
-          return send(text); 
         } catch (err) {
+          removeThinkingBubble();
           appendBubble('assistant', `⚠️ Không thể tạo cuộc trò chuyện: ${err.message}`);
+          sendBtn.disabled = false;
           return;
         }
       }
 
+      const docType = null;
+      const regType = null;
+
       if (loadingSessions.has(targetSessionId)) return;
-      
       loadingSessions.add(targetSessionId);
       renderHistoryList();
       
-      // Clear input and local UI if we are in the target session
-      if (currentSessionId === targetSessionId) {
-        sendBtn.disabled = true;
-        userInput.value = '';
-        userInput.style.height = 'auto';
-        appendBubble('user', text);
-        addThinkingBubble();
-      }
 
       try {
         const response = await fetch(API + '/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ session_id: targetSessionId, message: text }),
+          body: JSON.stringify({ 
+            session_id: targetSessionId, 
+            message: text,
+            doc_type: docType || null,
+            regulation_type: regType || null
+          }),
         });
 
-        if (!response.ok) {
-          const err = await response.json().catch(() => ({}));
-          throw new Error(err.detail || `HTTP ${response.status}`);
-        }
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
-        if (currentSessionId === targetSessionId) {
-          removeThinkingBubble();
-        }
+        if (currentSessionId === targetSessionId) removeThinkingBubble();
 
-        // Create the assistant bubble in session memory and optionally in UI
         let assistantBubble = null;
+        let sourcesContainer = null;
         if (currentSessionId === targetSessionId) {
           const assistantRow = appendBubble('assistant', '', true);
           assistantBubble = assistantRow.querySelector('.bubble');
+          
+          // Add source inspector UI (removed per user request)
         }
 
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let fullAnswer = '';
+        let buffer = '';
 
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
 
-          const chunk = decoder.decode(value, { stream: true });
-          fullAnswer += chunk;
-          
-          // Update UI only if still looking at the same session
-          if (currentSessionId === targetSessionId && assistantBubble) {
-            assistantBubble.textContent = fullAnswer;
-            scrollBottom();
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop();
+
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            try {
+              const data = JSON.parse(line);
+              if (data.type === 'metadata') {
+                if (sourcesContainer) renderSources(data.sources, sourcesContainer);
+              } else if (data.type === 'content') {
+                fullAnswer += data.content;
+                if (currentSessionId === targetSessionId && assistantBubble) {
+                  assistantBubble.textContent = fullAnswer;
+                  scrollBottom();
+                }
+              }
+            } catch (e) {
+              console.error("Error parsing NDJSON line:", e, line);
+            }
           }
         }
 
-        // Refresh session data in local state
         if (sessions[targetSessionId]) {
           const s = sessions[targetSessionId];
-          if (!s.messages) s.messages = [];
+          s.messages = s.messages || [];
           s.messages.push({ role: 'user', content: text, timestamp: new Date().toISOString() });
           s.messages.push({ role: 'assistant', content: fullAnswer, timestamp: new Date().toISOString() });
           s.message_count = s.messages.length;
 
-          // Background title refresh
           setTimeout(async () => {
             try {
               const full = await apiFetch(`/sessions/${targetSessionId}`);
               if (sessions[targetSessionId]) {
                 sessions[targetSessionId].title = full.title;
-                if (currentSessionId === targetSessionId) {
-                  sessionTitle.textContent = full.title;
-                }
+                if (currentSessionId === targetSessionId) sessionTitle.textContent = full.title;
                 renderHistoryList();
               }
             } catch (_) { }

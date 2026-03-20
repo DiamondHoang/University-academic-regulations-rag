@@ -14,6 +14,11 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt .
 RUN pip install --user --no-cache-dir -r requirements.txt
 
+# Pre-download models to cache them in the image
+COPY config.py .
+COPY scripts/download_models.py scripts/download_models.py
+RUN python scripts/download_models.py
+
 # Stage 2: Final image
 FROM python:3.10-slim
 
@@ -22,19 +27,10 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PATH="/root/.local/bin:$PATH"
 
-# Install necessary system packages
-RUN apt-get update && apt-get install -y curl openssh-server \
+# Install basic packages if needed
+RUN apt-get update && apt-get install -y curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy Ollama binary from the official image
-COPY --from=ollama/ollama:latest /usr/bin/ollama /usr/bin/ollama
-
-# Configure SSH for Azure Web SSH
-RUN mkdir -p /var/run/sshd \
-    && echo "root:Docker!" | chpasswd \
-    && echo "PermitRootLogin yes" >> /etc/ssh/sshd_config \
-    && echo "PasswordAuthentication yes" >> /etc/ssh/sshd_config \
-    && sed -i 's/#Port 22/Port 2222/' /etc/ssh/sshd_config
 
 # Copy installed packages from builder
 COPY --from=builder /root/.local /root/.local
@@ -46,10 +42,8 @@ RUN pip install --no-cache-dir gunicorn
 # Make entrypoint executable
 RUN chmod +x entrypoint.sh
 
-# Expose FastAPI, Ollama, and Azure SSH ports
+# Expose FastAPI port
 EXPOSE 8000
-EXPOSE 11434
-EXPOSE 2222
 
 # Healthcheck
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \

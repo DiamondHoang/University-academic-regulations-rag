@@ -1,9 +1,8 @@
 import os
-import logging
 import re
 import time
 import asyncio
-from typing import List, Optional, Dict, Any, AsyncGenerator
+from typing import List, Optional, Dict, Any, AsyncGenerator, Tuple
 
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_chroma import Chroma
@@ -13,17 +12,13 @@ from langchain_core.documents import Document
 try:
     import fcntl
 except ImportError:
-    # fcntl is not available on Windows, provide a dummy for local dev
-    fcntl = None
+    pass
 
 from config import Config
 from memory.conversation_memory import ConversationMemory
 from retrieval.vector_retriever import VectorRetriever
 from retrieval.response_generator import ResponseGenerator
 
-# Standardized logging configuration
-logging.basicConfig(level=logging.ERROR, format='%(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
 
 
 class UniversityRAG:
@@ -61,7 +56,6 @@ class UniversityRAG:
             max_history=self.config["max_history"],
             session_id=session_id
         )
-        self.all_chunks: List[Document] = []
     
     def build_vectorstore(self, documents: List[Document], force_rebuild: bool = False) -> None:
         """Initialize or load the vector store with optional concurrency protection.
@@ -79,20 +73,11 @@ class UniversityRAG:
         lock_fd = os.open(lock_path, os.O_RDWR | os.O_CREAT)
         try:
             # Concurrency Protection: Acquire an exclusive lock (blocks others)
-            if fcntl:
-                logger.info("Acquiring lock for vectorstore initialization...")
-                fcntl.flock(lock_fd, fcntl.LOCK_EX)
-                logger.info("Lock acquired.")
-            else:
-                logger.warning("fcntl not available. Skipping cross-process file lock (not safe for single-worker).")
-
             # 1. Split documents into manageable chunks
             chunks = self._split_documents(documents)
-            self.all_chunks = chunks
             
             # 2. Build or Load ChromaDB
             if force_rebuild or not os.path.exists(db_path):
-                logger.info("Building new vectorstore...")
                 self.vectorstore = Chroma.from_documents(
                     documents=chunks,
                     embedding=self.embeddings,
@@ -100,16 +85,12 @@ class UniversityRAG:
                     collection_metadata=Config.EMBEDDING_KWARGS
                 )
             else:
-                logger.info("Loading existing vectorstore...")
                 self.vectorstore = self._load_chroma_with_retry(db_path)
             
             # 3. Initialize the Hybrid Retriever
             self.retriever = VectorRetriever(self.vectorstore)
-            
+        
         finally:
-            if fcntl:
-                fcntl.flock(lock_fd, fcntl.LOCK_UN)
-                logger.info("Lock released.")
             os.close(lock_fd)
     
     def _load_chroma_with_retry(self, path: str, retries: int = 1) -> Chroma:
@@ -122,7 +103,6 @@ class UniversityRAG:
                 )
             except Exception as e:
                 if attempt < retries:
-                    logger.warning(f"ChromaDB load attempt {attempt+1} failed ({e}), retrying...")
                     time.sleep(2)
                 else:
                     raise e
@@ -172,11 +152,11 @@ class UniversityRAG:
                 doc_type = self._auto_detect_doc_type(audience)
             
             # 3. Document Retrieval
-            retrieved_docs = await self.retriever.aretrieve(
+            retrieved_docs = await self.retriever.retrieve(
                 search_query,
                 k=k or self.config["max_retrieved_docs"],
                 doc_type=doc_type,
-                regulation_type=regulation_type,
+                regulation_type=regulation_type
             )
             
             if not retrieved_docs:
@@ -197,7 +177,6 @@ class UniversityRAG:
                 )
                 answer = gen_result.get("answer", "")
             except Exception as e:
-                logger.error(f"Generation failed: {e}")
                 answer = "Hệ thống gặp sự cố khi tạo câu trả lời. Vui lòng thử lại sau."
             
             # 6. Update Memory
@@ -210,7 +189,6 @@ class UniversityRAG:
             return answer
             
         except Exception as e:
-            logger.error(f"Aquery failed: {e}", exc_info=True)
             return f"Xin lỗi, có lỗi hệ thống xảy ra: {str(e)}"
 
     async def astream_query(
@@ -218,11 +196,14 @@ class UniversityRAG:
         question: str,
         doc_type: Optional[str] = None,
         regulation_type: Optional[str] = None,
-    ) -> AsyncGenerator[str, None]:
-        """Process a query and stream the response tokens."""
+    ) -> AsyncGenerator[Dict[str, Any], None]:
+    # astream_query modified for better user experience
+        """Process a query and stream identifying metadata followed by tokens.
+        Yields Dicts with either 'type': 'metadata' or 'type': 'content' or 'type': 'log'.
+        """
         try:
             if not self.vectorstore or not self.retriever:
-                yield "Vector store chưa được khởi tạo."
+                yield {"type": "content", "content": "Vector store chưa được khởi tạo."}
                 return
             
             # 1. Prepare Query
@@ -240,31 +221,42 @@ class UniversityRAG:
                 doc_type = self._auto_detect_doc_type(audience)
             
             # 2. Retrieve
-            retrieved_docs = await self.retriever.aretrieve(
+            retrieved_docs = await self.retriever.retrieve(
                 search_query,
                 k=self.config["max_retrieved_docs"],
                 doc_type=doc_type,
-                regulation_type=regulation_type,
+                regulation_type=regulation_type
             )
             
             if not retrieved_docs:
-                yield "Tôi không tìm thấy thông tin liên quan trong các quy định hiện có."
+                yield {"type": "content", "content": "Tôi không tìm thấy thông tin liên quan trong các quy định hiện có."}
                 return
             
-            # 3. Stream Generation
+            # 3. Yield Metadata (Sources)
             max_docs = self.config.get("max_response_docs", Config.MAX_RESPONSE_DOCS)
             ranked_docs = retrieved_docs[:max_docs]
             
+            yield {
+                "type": "metadata",
+                "sources": [
+                    {
+                        "content": dc.page_content,
+                        "metadata": dc.metadata
+                    } for dc in ranked_docs
+                ]
+            }
+
+            # 4. Stream Generation
             async for chunk in self.response_generator.astream_generate(
                 query=question,
                 documents=ranked_docs,
                 conversation_history=self.memory.get_context_string(include_last_n=2)
             ):
-                yield chunk
+                yield {"type": "content", "content": chunk}
                 
         except Exception as e:
-            logger.error(f"Streaming Query failed: {e}", exc_info=True)
-            yield f"\n[Lỗi hệ thống trong khi tạo phản hồi: {str(e)}]"
+            yield {"type": "content", "content": f"\n[Lỗi hệ thống trong khi tạo phản hồi: {str(e)}]\n"}
+
     
     def _preprocess_query(self, query: str) -> str:
         """Expand common abbreviations to improve search recall."""
@@ -278,20 +270,25 @@ class UniversityRAG:
         if not history:
             return False
             
+        query_lower = query.lower().strip()
+        
         # If it's short, it likely needs context (e.g. "Cái đó là gì?", "Điều kiện thế nào?")
-        word_count = len(query.split())
-        if word_count < 5:
+        word_count = len(query_lower.split())
+        if word_count < 4:
             return True
             
+        # If it's a "yes/no" or very simple continuation
+        if query_lower in ["vâng", "đúng", "không", "thế à", "ok", "được"]:
+            return True
+
         # If it contains context-dependent pronouns (Vietnamese)
-        context_words = ["đó", "này", "kia", "ấy", "họ", "nó", "thế nào", "bao nhiêu", "ai", "đâu"]
-        query_lower = query.lower()
+        context_words = ["đó", "này", "kia", "ấy", "họ", "nó", "thế nào", "bao nhiêu", "ai", "đâu", "vậy", "trên"]
         if any(rf"\b{word}\b" in query_lower for word in context_words):
             return True
             
-        # If it's long and has specific keywords, it's likely standalone
-        standalone_keywords = ["quy định", "đăng ký", "học phần", "tín chỉ", "hồ sơ", "thời hạn"]
-        if word_count > 10 and any(kw in query_lower for kw in standalone_keywords):
+        # If it's long and has specific keywords, it's definitely standalone - trust the user's input
+        standalone_keywords = ["quy định", "đăng ký", "học phần", "tín chỉ", "hồ sơ", "thời hạn", "điểm", "tốt nghiệp", "xét", "hủy"]
+        if word_count >= 5 and any(kw in query_lower for kw in standalone_keywords):
             return False
             
         # Default: rewrite if in doubt but we have history

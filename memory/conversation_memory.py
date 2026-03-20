@@ -104,22 +104,6 @@ class ConversationMemory:
 
         return "\n".join(context_parts)
 
-    def get_last_turn(self) -> Optional[Dict]:
-        """Get last conversation turn
-
-        Returns:
-            Last turn or None if empty
-        """
-        return self.history[-1] if self.history else None
-
-    def get_history(self) -> List[Dict]:
-        """Get full conversation history
-
-        Returns:
-            Copy of conversation history
-        """
-        return self.history.copy()
-
     def clear(self) -> None:
         """Clear conversation history and persist change"""
         self.history = []

@@ -1,4 +1,3 @@
-import logging
 import re
 import textwrap
 from datetime import datetime
@@ -6,8 +5,6 @@ from typing import List, Dict, Tuple, Optional
 from langchain_core.documents import Document
 from langchain_ollama import ChatOllama
 from config import Config
-
-logger = logging.getLogger(__name__)
 
 class ResponseGenerator:
     """Modular Response Generator with multi-source grounding and Vietnamese prompts."""
@@ -24,9 +21,9 @@ class ResponseGenerator:
     def _get_llm(self) -> ChatOllama:
         """Create a fresh ChatOllama instance for the current event loop."""
         return ChatOllama(
-            model=self.config["llm_model"],
-            temperature=self.config.get("llm_temperature", Config.LLM_TEMPERATURE),
             base_url=self.config.get("ollama_base_url", Config.OLLAMA_BASE_URL),
+            model=self.config.get("ollama_model", Config.OLLAMA_MODEL),
+            temperature=self.config.get("llm_temperature", Config.LLM_TEMPERATURE),
             timeout=120.0
         )
 
@@ -65,12 +62,10 @@ class ResponseGenerator:
                 primary_source_index=1
             )
             llm = self._get_llm()
-            logger.info(f"Generating answer with {len(selected_docs)} sources.")
             
             response = await llm.ainvoke(messages)
             answer = response.content.strip() if hasattr(response, 'content') else str(response)
         except Exception as e:
-            logger.error(f"LLM generation failed: {e}")
             answer = "Hệ thống gặp sự cố khi tạo câu trả lời."
 
         # 4. Output Processing & Formatting
@@ -174,7 +169,6 @@ class ResponseGenerator:
                 yield buffer
 
         except Exception as e:
-            logger.error(f"LLM streaming failed: {e}")
             yield "Hệ thống gặp sự cố khi tạo câu trả lời."
             return
 
@@ -213,13 +207,25 @@ class ResponseGenerator:
             return query
             
         system_prompt = textwrap.dedent("""
-            Nhiệm vụ: Chuyển câu hỏi của người dùng thành một câu hỏi ĐỘC LẬP (standalone) và ĐẦY ĐỦ Ý NGHĨA dựa trên lịch sử hội thoại.
+            Nhiệm vụ: Viết lại câu hỏi mới nhất của người dùng thành một câu hỏi ĐỘC LẬP (standalone) và ĐẦY ĐỦ Ý NGHĨA bằng cách bổ sung các thông tin (chủ đề, đối tượng, mốc thời gian) từ Lịch sử hội thoại.
             
             Quy tắc:
             1. Bạn PHẢI trả về câu hỏi đã được viết lại bằng tiếng Việt.
-            2. Câu hỏi mới phải chứa đầy đủ ngữ cảnh để có thể thực hiện tìm kiếm tài liệu mà không cần xem lại lịch sử.
-            3. Nếu câu hỏi hiện tại đã đầy đủ hoặc không liên quan đến lịch sử, hãy giữ nguyên nó.
-            4. Chỉ trả về văn bản của câu hỏi mới, không giải thích gì thêm.
+            2. Nếu câu hỏi mới mang tính chất nối tiếp (ví dụ: "còn chương trình X?", "năm 2024 thì sao?"), hãy lấy bối cảnh của câu hỏi trước đó để ghép vào tạo thành một câu hỏi hoàn chỉnh.
+            3. Nếu câu hỏi hiện tại đã đầy đủ hoặc chuyển sang chủ đề hoàn toàn mới, hãy giữ nguyên nó.
+            4. Chỉ trả về văn bản của câu hỏi mới, KHÔNG giải thích gì thêm, KHÔNG dùng dấu ngoặc kép.
+            
+            Ví dụ 1:
+            Lịch sử: 
+            Q1: Điều kiện xét tốt nghiệp của sinh viên K22 là gì?
+            Câu hỏi mới: còn K23 thì sao?
+            -> Điều kiện xét tốt nghiệp của sinh viên K23 là gì?
+            
+            Ví dụ 2:
+            Lịch sử:
+            Q1: Từ khóa 2023, chứng chỉ MOS được yêu cầu thế nào với sinh viên chương trình Tiếng Anh?
+            Câu hỏi mới: còn chương trình tiếng nhật?
+            -> Từ khóa 2023, chứng chỉ MOS được yêu cầu thế nào với sinh viên chương trình Tiếng Nhật?
         """).strip()
         
         human_prompt = f"Lịch sử hội thoại:\n{conversation_history}\n\nCâu hỏi mới: {query}"
@@ -232,45 +238,10 @@ class ResponseGenerator:
             ]
             response = await llm.ainvoke(messages)
             rewritten = response.content.strip() if hasattr(response, 'content') else str(response)
-            logger.info(f"Query rewritten: '{query}' -> '{rewritten}'")
             return rewritten
         except Exception as e:
-            logger.error(f"Query rewriting failed: {e}")
             return query
             
-    def _get_source_footer(self, answer: str, sources: List[Dict]) -> str:
-        """Extract logic to build the source footer from _format_response."""
-        # Collapse citations and handle both old [N] and new [SOURCE_ID_N] formats
-        answer = re.sub(r'\[SOURCE_ID_(\d+)\]', r'[\1]', answer)
-        answer = re.sub(r'\[Nguồn\s+(\d+)\]\s*\[\1\]', r'[\1]', answer)
-        answer = re.sub(r'\[Nguồn\s+(\d+)\]', r'[\1]', answer)
-        
-        cite_pattern = r'\[(\d+)\]'
-        all_matches = list(re.finditer(cite_pattern, answer))
-        
-        orig_to_new: Dict[int, Dict] = {}
-        next_new_idx: int = 1
-        for m in all_matches:
-            orig_idx = int(m.group(1))
-            if orig_idx not in orig_to_new:
-                source = next((s for s in sources if s["index"] == orig_idx), None)
-                # Fallback: if only one source exists, map any citation to it
-                if not source and len(sources) == 1:
-                    source = sources[0]
-                
-                if source:
-                    orig_to_new[orig_idx] = {"new_idx": next_new_idx, "source": source}
-                    next_new_idx += 1
-
-        if not orig_to_new: return ""
-        
-        cited_items = sorted(orig_to_new.values(), key=lambda x: x["new_idx"])
-        source_lines = ["Nguồn tham khảo:"]
-        for item in cited_items:
-            s = item["source"]
-            source_lines.append(f"[{item['new_idx']}] {s['title']} (Ban hành: {s['issue_date']})")
-        return "\n".join(source_lines)
-
     def _format_response(self, answer: str, sources: List[Dict]) -> str:
         """Format final answer with sequential source indexing."""
         if not sources:
