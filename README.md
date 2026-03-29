@@ -11,7 +11,7 @@ pinned: false
 # HCMUT Academic Regulations Chatbot
 
 This is an intelligent AI assistant designed to help students and faculty at **Ho Chi Minh City University of Technology (HCMUT)** navigate academic regulations.
-Experience it now at: [https://huggingface.co/spaces/diphoenix/regulationchatbot](https://huggingface.co/spaces/diphoenix/regulationchatbot)
+Experience it now at: [https://huggingface.co/spaces/DiamondHoang/regulation-chatbot](https://huggingface.co/spaces/DiamondHoang/regulation-chatbot)
 
 ### Key Features
 - **Context-Aware Chat**: Supports follow-up questions for a natural conversation experience.

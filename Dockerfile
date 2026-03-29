@@ -36,7 +36,7 @@ WORKDIR /app
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PATH="/root/.local/bin:$PATH" \
-HF_HOME="/app/.cache/huggingface"
+    HF_HOME="/app/.cache/huggingface"
 
 # Install basic packages if needed
 RUN apt-get update && apt-get install -y curl \
