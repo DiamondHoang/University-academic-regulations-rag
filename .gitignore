@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+
+# Vector DB
+vector_db/
+
+# Data
+images/
+PDF/
+
+# Memory
+memory/history*.json

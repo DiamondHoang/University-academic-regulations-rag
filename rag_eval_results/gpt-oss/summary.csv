@@ -1,0 +1,5 @@
+,overall
+faithfulness,0.899
+context_precision,0.7683333332860832
+context_recall,0.8533333333333333
+answer_correctness,0.7156911609298203

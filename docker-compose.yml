@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  rag-bot:
+    build: .
+    ports:
+      - "7860:7860"
+    volumes:
+      - .:/app
+      - hf_cache:/root/.cache/huggingface
+    environment:
+      - EMBEDDING_MODEL=BAAI/bge-m3
+      - DB_PATH=vector_db
+    restart: always
+
+volumes:
+  hf_cache:
