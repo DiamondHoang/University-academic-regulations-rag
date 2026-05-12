@@ -51,6 +51,11 @@ class VectorRetriever:
 
             # 2. Re-ranking
             if self.reranker and len(docs) > 1:
+                # Skip reranking if we have Contextual Retrieval (Zero-latency retrieval)
+                if Config.USE_CONTEXTUAL_RETRIEVAL:
+                    print("[Retrieval] Contextual Retrieval is active. Skipping re-ranking for maximum speed.")
+                    return docs[:k]
+
                 try:
                     # Rerank first 700 chars of each doc for speed efficiency
                     pairs = [[query, doc.page_content[:700]] for doc in docs]

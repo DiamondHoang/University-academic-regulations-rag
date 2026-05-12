@@ -1,4 +1,5 @@
 import os
+import asyncio
 from typing import List, Optional, Dict, Any, AsyncGenerator, Tuple
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_chroma import Chroma
@@ -41,14 +42,34 @@ class UniversityRAG:
             session_id=session_id
         )
     
-    def build_vectorstore(self, documents: List[Document], force_rebuild: bool = False) -> None:
+    async def build_vectorstore(self, documents: List[Document], force_rebuild: bool = False) -> None:
         """Initialize or rebuild the vector database."""
         db_path = self.config["db_path"]
-        chunks = self._split_documents(documents)
         
         if force_rebuild or not os.path.exists(db_path):
             print(f"[RAG] Building vectorstore at {db_path}")
-            self.vectorstore = Chroma.from_documents(
+            chunks = self._split_documents(documents)
+            
+            # --- Contextual Retrieval Step ---
+            if Config.USE_CONTEXTUAL_RETRIEVAL:
+                from loader.doc_loader import RegulationDocumentLoader
+                loader = RegulationDocumentLoader(llm=self.response_generator._get_llm())
+                
+                print(f"[RAG] Contextualizing {len(chunks)} chunks...")
+                semaphore = asyncio.Semaphore(5) # Rate limit to 5 concurrent calls
+                
+                async def contextualize_with_limit(doc):
+                    async with semaphore:
+                        doc.page_content = await loader.contextualize_document(doc)
+                        return doc
+                
+                tasks = [contextualize_with_limit(chunk) for chunk in chunks]
+                chunks = await asyncio.gather(*tasks)
+                print("[RAG] Contextualization complete.")
+            # ---------------------------------
+
+            self.vectorstore = await asyncio.to_thread(
+                Chroma.from_documents,
                 documents=chunks,
                 embedding=self.embeddings,
                 persist_directory=db_path,

@@ -11,10 +11,23 @@ class Config:
     EMBEDDING_KWARGS = {"hnsw:space": "cosine"}
     
     # --- Retrieval & Re-ranking ---
-    USE_RERANKER = True
+    USE_RERANKER = False
     RERANKER_MODEL = "BAAI/bge-reranker-v2-m3"
     MAX_RETRIEVED_DOCS = 15
     MAX_RESPONSE_DOCS = 4
+    
+    # --- Contextual Retrieval (Improved Accuracy) ---
+    USE_CONTEXTUAL_RETRIEVAL = True
+    CONTEXTUAL_PROMPT = """
+    Bạn là chuyên gia tư vấn quy chế đại học. 
+    Dưới đây là một đoạn trích từ tài liệu: "{title}".
+    Hãy tóm tắt bối cảnh của tài liệu này trong tối đa 20 từ để giúp đoạn trích dưới đây có thể hiểu độc lập.
+    
+    Đoạn trích: {chunk}
+    
+    Trả về CHỈ câu tóm tắt bối cảnh, không giải thích gì thêm.
+    Kết quả mong muốn (Ví dụ): "Trong quy định về học bổng khuyến khích HK241, quy trình xét duyệt là..."
+    """
     
     # --- LLM Providers (Groq / Ollama) ---
     LLM_PROVIDER = "groq" 

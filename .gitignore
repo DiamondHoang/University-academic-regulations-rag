@@ -4,6 +4,10 @@ venv/
 
 # Vector DB
 vector_db/
+vector_db_backup/
+*.sqlite3
+*.bin
+*.pkl
 
 # Data
 images/

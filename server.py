@@ -73,7 +73,7 @@ class SessionManager:
                 response_generator=self.shared_generator
             )
             print(f"Loading/Building vectorstore from {config['db_path']}")
-            await asyncio.to_thread(rag.build_vectorstore, documents, force_rebuild=False)
+            await rag.build_vectorstore(documents, force_rebuild=False)
             print("Vectorstore ready")
 
             self.shared_rag = rag
@@ -291,6 +291,9 @@ async def chat(req: ChatRequest):
     if len(data["messages"]) == 1:
         data["title"] = req.message[:50] + ("..." if len(req.message) > 50 else "")
 
+    import time
+    start_time = time.perf_counter()
+
     async def _streamer():
         """Internal generator: stream RAG results and record the final answer."""
         full_answer = ""
@@ -310,6 +313,10 @@ async def chat(req: ChatRequest):
                 "content": full_answer,
                 "timestamp": datetime.utcnow().isoformat(),
             })
+            
+            duration = time.perf_counter() - start_time
+            print(f"[Chat] Session: {req.session_id[:8]} - Response Time: {duration:.2f}s")
+            
         except Exception as e:
             yield f"\n[Lỗi hệ thống: {str(e)}]"
 

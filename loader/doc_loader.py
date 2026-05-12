@@ -1,21 +1,25 @@
 import re
+import json
 from pathlib import Path
 from typing import Dict, List
 from langchain_core.documents import Document
 from bs4 import BeautifulSoup
+from langchain_groq import ChatGroq
 from config import Config
 
 
 class RegulationDocumentLoader:
     """Loader for university regulation documents with metadata extraction and content cleaning."""
     
-    def __init__(self, base_path: str = "md"):
+    def __init__(self, base_path: str = "md", llm: ChatGroq = None):
         """Initialize loader
         
         Args:
             base_path: Base directory path for documents
+            llm: Optional LLM instance for contextualization
         """
         self.base_path = Path(base_path)
+        self.llm = llm
     
     def extract_metadata_from_path(self, file_path: Path) -> Dict[str, str]:
         """Keep only the absolute file path as core metadata."""
@@ -228,4 +232,82 @@ class RegulationDocumentLoader:
                 print(f"Error loading {md_file}: {e}")
 
         return documents
+
+    async def load_hierarchical_documents(self) -> List[Document]:
+        """
+        Load documents and split them into Parent (Summary/Pivot) and Child (Detail) chunks.
+        """
+        all_documents = self.load_documents()
+        hierarchical_docs = []
+        
+        for doc in all_documents:
+            # 1. Create a Parent Summary (The Pivot)
+            summary_content = await self.contextualize_document(doc)
+            summary_only = summary_content.split("\n\n")[0]
+            
+            parent_id = f"p_{Path(doc.metadata['file_path']).stem}"
+            
+            # 2. Create the Pivot Document
+            pivot_doc = Document(
+                page_content=summary_only,
+                metadata={
+                    **doc.metadata,
+                    "doc_level": "parent",
+                    "parent_id": parent_id,
+                    "is_pivot": True
+                }
+            )
+            hierarchical_docs.append(pivot_doc)
+            
+            # 3. Create Child Chunks (Details)
+            from langchain_text_splitters import RecursiveCharacterTextSplitter
+            child_splitter = RecursiveCharacterTextSplitter(
+                chunk_size=Config.CHUNK_SIZE // 2,
+                chunk_overlap=50,
+                separators=Config.SEPARATORS
+            )
+            child_chunks = child_splitter.split_text(doc.page_content)
+            
+            for i, chunk in enumerate(child_chunks):
+                child_doc = Document(
+                    page_content=f"{summary_only}\n\n{chunk}",
+                    metadata={
+                        **doc.metadata,
+                        "doc_level": "child",
+                        "parent_id": parent_id,
+                        "chunk_index": i,
+                        "is_pivot": False
+                    }
+                )
+                hierarchical_docs.append(child_doc)
+                
+        return hierarchical_docs
+
+    async def contextualize_document(self, document: Document) -> str:
+        """Add document-level context to a chunk using the LLM.
+        
+        Args:
+            document: The LangChain Document object to enhance.
+            
+        Returns:
+            The enhanced page_content with context prepended.
+        """
+        if not self.llm:
+            return document.page_content
+            
+        title = document.metadata.get("title", "Tài liệu quy định")
+        chunk_text = document.page_content[:1500] # Limit chunk for LLM processing
+        
+        prompt = Config.CONTEXTUAL_PROMPT.format(title=title, chunk=chunk_text)
+        
+        try:
+            # We use a lower temperature for consistency
+            response = await self.llm.ainvoke([{"role": "user", "content": prompt}])
+            context = response.content.strip() if hasattr(response, 'content') else str(response)
+            
+            # Prepend context to the original chunk
+            return f"{context}\n\n{document.page_content}"
+        except Exception as e:
+            print(f"[Loader] Contextualization failed for '{title}': {e}")
+            return document.page_content
 

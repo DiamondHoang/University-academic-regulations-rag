@@ -23,7 +23,7 @@ async def run_chat():
         return
 
     # Build vectorstore (handles persistence internally)
-    rag.build_vectorstore(documents, force_rebuild=False)
+    await rag.build_vectorstore(documents, force_rebuild=False)
     
     
     while True:
@@ -44,10 +44,18 @@ async def run_chat():
                 show_history(rag)
                 continue
             
+            import time
+            start_time = time.perf_counter()
+            
             answer = await rag.aquery(
                 user_input
             )
+            
+            end_time = time.perf_counter()
+            duration = end_time - start_time
+            
             print(f"\nHệ thống: {answer}")
+            print(f"[Thời gian phản hồi: {duration:.2f} giây]")
             
         except KeyboardInterrupt:
             break
